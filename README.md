@@ -1,8 +1,14 @@
-# 🧠 Agent Workflow System — 双智能体编码工作流
+# 🧠 BeCode — 双智能体编码工作流
 
-> 基于 LangChain 1.3+ / LangGraph 架构的双智能体协作编码系统，实现 **Coder Agent（编码）→ Reviewer Agent（审查）→ 反馈循环** 的自动化软件开发流水线。
+> 基于 LangChain 1.3+  架构的双智能体协作编码系统，实现 **Coder Agent（编码）→ Reviewer Agent（审查）→ 反馈循环** 的自反馈系统。致力于通过提示词工程，让普通模型的编码能力和工程完成度获得提升。
+
 
 ---
+
+## 作者有话说
+- *既然fable5代表着模型进步，会消解之前所做的所有跟提示词相关的工作，那么反推过来，能否通过编排和提示词控制，让现有模型达到那种高度？*
+- *当前BeCode的开发，除去第一次构建使用deepseek v4 flash驱动的Claude Code完成编码，为其提供了初始的文件编辑工具和命令运行工具。后面的迭代均使用BeCode自己进行开发。*
+- *少即是多。*
 
 ## ✨ 特性
 
@@ -91,7 +97,7 @@ LOG_LEVEL=WARNING
 python main.py "创建一个 Python 脚本，实现斐波那契数列"
 
 # 方式二：从文件读取需求
-python main.py --file requirement.txt
+python main.py --file prompt.txt
 
 # 方式三：交互式输入
 python main.py --interactive
@@ -147,7 +153,7 @@ python main.py --interactive
 
 | 工具 | 功能 | 说明 |
 |------|------|------|
-| `web_search` | Bing 搜索引擎搜索（HTML 解析） | 无需 API Key |
+| `web_search` | Bing 搜索引擎搜索（HTML 解析） | 本地访问和解析 |
 | `web_fetch` | 网页内容提取（BeautifulSoup） | 自动去除导航/脚本/样式 |
 
 ### BashGuard 安全防护
@@ -187,7 +193,7 @@ python main.py --interactive
 
 | 依赖 | 版本 | 用途 |
 |------|------|------|
-| `langchain` | ≥ 0.3.0 | LangGraph 智能体框架 |
+| `langchain` | ≥ 0.3.0 |  智能体框架 |
 | `langchain-community` | ≥ 0.3.0 | 社区工具/模型 |
 | `langchain-openai` | ≥ 0.3.0 | OpenAI 协议 LLM 客户端 |
 | `python-dotenv` | ≥ 1.0.0 | .env 环境变量加载 |
