@@ -9,6 +9,7 @@ Provides a Claude Code-style terminal interface with:
 
 import sys
 import shutil
+import signal
 from typing import Optional
 from pathlib import Path
 
@@ -72,6 +73,73 @@ class AgentConsole:
                 width=self._width,
             )
         )
+        self._console.print()
+
+    # ── Summary Display (Interactive Mode) ────────────────────────────
+
+    def show_summary(self, text: str):
+        """Display a one-line LLM-generated task summary in light gray italic."""
+        self._console.print()
+        self._console.print(
+            Panel(
+                Text.from_markup(f"[italic bright_black]{text}[/]"),
+                box=box.SIMPLE,
+                border_style="bright_black",
+                width=self._width,
+                padding=(0, 1),
+                title="[dim italic]📋 上次任务总结[/]",
+            )
+        )
+        self._console.print()
+
+    def interactive_prompt(self, prompt_text: str = "请输入需求:", prefill: str = "") -> str:
+        """Show an interactive input prompt with optional pre-fill hint.
+
+        Args:
+            prompt_text: The prompt message to display.
+            prefill: Previous user input to show as a hint (on Ctrl+C return).
+
+        Returns:
+            The user's input string (may be empty).
+        """
+        if prefill:
+            self._console.print(
+                Text.from_markup(
+                    f"[dim italic]💡 上次输入 (可参考): \"{prefill}\"[/]"
+                )
+            )
+        try:
+            return input(f"\n[bold cyan]💬 {prompt_text}[/] ").strip()
+        except KeyboardInterrupt:
+            # Signal handler will be managed at the top level
+            raise
+
+    def show_interrupt_message(self, has_output: bool = False):
+        """Display a Ctrl+C interrupt message."""
+        if has_output:
+            self._console.print(
+                Panel(
+                    Text.from_markup(
+                        "[italic dim]⌨️ 用户中断 — 当前输出已保留，可继续输入新需求[/]"
+                    ),
+                    box=box.SIMPLE,
+                    border_style="yellow",
+                    width=self._width,
+                    padding=(0, 1),
+                )
+            )
+        else:
+            self._console.print(
+                Panel(
+                    Text.from_markup(
+                        "[italic dim]⌨️ 用户中断 — 返回输入状态[/]"
+                    ),
+                    box=box.SIMPLE,
+                    border_style="yellow",
+                    width=self._width,
+                    padding=(0, 1),
+                )
+            )
         self._console.print()
 
     # ── Iteration / Agent Lifecycle ───────────────────────────────────

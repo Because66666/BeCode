@@ -57,3 +57,34 @@ def clean_prompt_call(
     """One-shot a plain-text prompt (no history).  Used by BashGuard."""
     llm = build_chat_model(temperature=temperature, model=model)
     return clean_call(llm, [HumanMessage(content=prompt)], system_prompt=system_prompt)
+
+
+def summarize_completion(
+    requirement: str,
+    coder_report: str,
+    model: Optional[str] = None,
+) -> str:
+    """Generate a one-sentence summary of what was accomplished.
+
+    Args:
+        requirement: The original user requirement.
+        coder_report: The Coder Agent's final report.
+        model: Optional model override.
+
+    Returns:
+        A concise one-line Chinese summary (≤ 80 characters).
+    """
+    prompt = (
+        f"请用一句简短的话（不超过 80 字）总结以下任务完成了什么，"
+        f"语气平实客观。\n\n用户需求:\n{requirement[:500]}\n\n"
+        f"实现报告:\n{coder_report[:1000]}"
+    )
+    llm = build_chat_model(temperature=0.3, model=model)
+    result = clean_call(llm, [HumanMessage(content=prompt)])
+    # Clean up quotes, newlines, etc.
+    summary = result.strip().strip('"').strip("'").strip()
+    # Trim to one line
+    summary = summary.split("\n")[0].strip()
+    if len(summary) > 120:
+        summary = summary[:117] + "..."
+    return summary

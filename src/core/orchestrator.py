@@ -34,6 +34,63 @@ class Orchestrator:
 
     # ── public API ──────────────────────────────────────────────────
 
+    def run_interactive(self, requirement: str, summary_context: list[str] | None = None) -> dict:
+        """Execute the agent workflow in interactive mode with accumulated context.
+
+        Differs from :meth:`run` in that it:
+        1. Injects previous task summaries into the prompt context.
+        2. Returns immediately on Ctrl+C with partial results.
+        3. Does NOT exit the process after completion.
+
+        Args:
+            requirement: The user's request for this round.
+            summary_context: List of one-line summaries from previous rounds.
+
+        Returns:
+            dict with keys:
+              - success: bool
+              - summary: str  (one-line summary of this round)
+              - total_turns: int
+              - session_id: str
+              - coder_reports: list[str]
+              - review_verdicts: list[str]
+              - interrupted: bool  (True if Ctrl+C was caught)
+        """
+        # Build the enriched requirement with previous task summaries
+        enriched_requirement = requirement
+        if summary_context:
+            summary_block = "\n".join(
+                f"- {s}" for s in summary_context[-10:]  # Keep last 10 summaries
+            )
+            enriched_requirement = (
+                f"{requirement}\n\n"
+                f"## 已完成任务的背景\n"
+                f"以下是此前已完成的任务摘要，作为当前任务的上下文背景:\n"
+                f"{summary_block}\n"
+            )
+
+        # Run the standard workflow
+        result = self.run(enriched_requirement)
+
+        # Generate a one-line summary of this round
+        if result["success"] and result.get("coder_reports"):
+            from src.core.llm_client import summarize_completion
+            try:
+                last_coder = result["coder_reports"][-1]
+                one_line = summarize_completion(
+                    requirement=requirement,
+                    coder_report=last_coder,
+                    model=self.model_name,
+                )
+            except Exception:
+                one_line = f"已完成: {requirement[:60]}..."
+        else:
+            one_line = f"部分完成（未通过审查）: {requirement[:60]}..."
+
+        result["one_line_summary"] = one_line
+        result["interrupted"] = False
+        return result
+
     def run(self, requirement: str) -> dict:
         """Execute the full agent workflow.
 

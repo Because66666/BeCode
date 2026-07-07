@@ -69,6 +69,7 @@ def interactive_mode(orchestrator: Orchestrator, model_name: Optional[str] = Non
     summary_context: list[str] = []  # Accumulated summaries for prompt context
     last_user_input: str = ""
     previous_result: Optional[dict] = None
+    should_prefill: bool = False  # Whether to show pre-fill hint on next prompt
 
     console.welcome(
         session_id=orchestrator.session.session_id,
@@ -86,21 +87,20 @@ def interactive_mode(orchestrator: Orchestrator, model_name: Optional[str] = Non
 
         # ── Step 1: Get user input ──────────────────────────────────
         try:
-            if last_user_input and previous_result and not previous_result.get("interrupted", True):
-                # Normal flow: fresh prompt
-                pass  # Show normal prompt
-
             user_input = console.interactive_prompt(
                 "请输入任务需求 (输入 .exit 退出):",
-                prefill=last_user_input if _ctrl_c_pressed else "",
+                prefill=last_user_input if should_prefill else "",
             )
+            should_prefill = False  # Reset after successful input
         except KeyboardInterrupt:
-            # Ctrl+C during input: loop back with pre-fill
+            # Ctrl+C during input: loop back with pre-fill on next round
+            should_prefill = True
             console.show_interrupt_message(has_output=False)
             continue
 
         if not user_input:
             console.print("[dim]空输入，请重新输入。[/]")
+            should_prefill = True
             continue
 
         if user_input == ".exit":
@@ -127,8 +127,8 @@ def interactive_mode(orchestrator: Orchestrator, model_name: Optional[str] = Non
             # Ctrl+C during agent execution
             console.show_interrupt_message(has_output=_has_formal_output)
 
-            if _has_formal_output and previous_result:
-                # Partial output exists — treat as a completed task summary
+            if _has_formal_output and result:
+                # Partial output exists — treat as context
                 summary_context.append(
                     f"（被中断）任务: {user_input[:50]}..."
                 )
@@ -137,14 +137,15 @@ def interactive_mode(orchestrator: Orchestrator, model_name: Optional[str] = Non
                 )
             else:
                 # No formal output — go back to input with pre-fill
+                should_prefill = True
                 console.print(
                     "[dim italic]无输出结果，返回输入状态。[/]"
                 )
-                # Keep last_user_input for pre-fill
             continue
 
         except Exception as exc:
             console.error(f"执行异常: {exc}")
+            should_prefill = True
             continue
 
         previous_result = result
@@ -227,7 +228,6 @@ def main():
         description=f"{APP_NAME} — 双智能体编码工作流系统 v{APP_VERSION}",
     )
     parser.add_argument("--version", "-v", action="store_true", help="显示版本信息")
-    parser.add_argument("--hello", action="store_true", help="打印 hello world test")
     src_grp = parser.add_mutually_exclusive_group()
     src_grp.add_argument("requirement", nargs="?", help="需求文本 (直接传入)")
     src_grp.add_argument("--file", "-f", type=str, help="从文件读取需求")
@@ -242,11 +242,6 @@ def main():
     if args.version:
         print(f"{APP_NAME} v{APP_VERSION}")
         print(f"数据目录: {BECODE_HOME}")
-        sys.exit(0)
-
-    # ── Hello World ──────────────────────────────────────────────────
-    if args.hello:
-        print("hello world test")
         sys.exit(0)
 
     # ── Ensure data directory exists ────────────────────────────────
