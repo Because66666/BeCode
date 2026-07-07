@@ -9,7 +9,6 @@
 - 默认使用中文回复；技术术语可按需保留英文。
 - 当你修复完bug后，一定要运行它，禁止修复完不检查不运行就交还给用户。
 - 进行 git commit 时，提交信息必须包含 `Made-with: Because66666`，并偏好按功能点分组、附结构化需求块（如 FR/NFR/AC）。
-- Plan 文档必须落盘到 `.trae/plans/` 并随代码一起提交，不能遗漏。
 - **Plan 与 git commit 信息严禁出现客户信息**：不得在 plan 标题/正文、Plan-Id slug、commit subject/body 中写入客户名称、客户代号、客户目录路径或可识别标识；一律用「Enterprise 交付」「客户项目」「外部招标文档本地目录」等中性表述；Plan 文件名也不得嵌入客户 slug。
 - 当用户需要你查找代码失败的原因/解决某一个bug的时候，通过调用各种工具，必须拿出代码级证据定位错误原因。
 - 偏好 OpenAI 协议兼容模型（API Base/Key/Model 从 .env 读取），使用 LangChain 最新版（1.3+）的 `create_agent` API（LangGraph 架构），而非旧版 `AgentExecutor`。
