@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Agent Workflow System — Entry Point.
+"""BeCode — 双智能体编码工作流系统。
 
 Usage:
-    python main.py "your requirement here"
-    python main.py --file requirement.txt
-    python main.py --interactive       # multi-line input
+    becode "your requirement here"
+    becode --file requirement.txt
+    becode --interactive       # multi-line input
+
+Data directory: ~/.becode/  — sessions, .env, and logs are stored here.
 """
 
 import argparse
@@ -12,13 +14,16 @@ import logging
 import sys
 from pathlib import Path
 
-from src.core.config import settings
+from src.core.config import settings, BECODE_HOME, SESSION_DIR
 from src.core.orchestrator import Orchestrator
 from src.core.session_store import SessionStore
 from src.tools.tools import set_workspace_root
 
+# ── Application metadata ───────────────────────────────────────────
+APP_NAME = "BeCode"
+APP_VERSION = "1.0.0"
+
 # Only WARNING and above (ERROR, CRITICAL) are shown on console
-# (Always use WARNING for console output to suppress INFO debug logs)
 logging.basicConfig(
     level=logging.WARNING,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -28,9 +33,10 @@ logging.basicConfig(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Agent Workflow System — 双智能体编码工作流",
+        description=f"{APP_NAME} — 双智能体编码工作流系统 v{APP_VERSION}",
     )
-    src_grp = parser.add_mutually_exclusive_group(required=True)
+    parser.add_argument("--version", "-v", action="store_true", help="显示版本信息")
+    src_grp = parser.add_mutually_exclusive_group()
     src_grp.add_argument("requirement", nargs="?", help="需求文本 (直接传入)")
     src_grp.add_argument("--file", "-f", type=str, help="从文件读取需求")
     src_grp.add_argument("--interactive", "-i", action="store_true", help="交互式输入")
@@ -41,7 +47,17 @@ def main():
 
     args = parser.parse_args()
 
+    # ── Version ─────────────────────────────────────────────────────
+    if args.version:
+        print(f"{APP_NAME} v{APP_VERSION}")
+        print(f"数据目录: {BECODE_HOME}")
+        sys.exit(0)
+
+    # ── Ensure data directory exists ────────────────────────────────
+    BECODE_HOME.mkdir(parents=True, exist_ok=True)
+
     # ── Resolve requirement ─────────────────────────────────────────
+    requirement = ""
     if args.interactive:
         print("请输入需求（输入 .done 结束）:")
         lines = []
@@ -54,23 +70,18 @@ def main():
                 break
             lines.append(line)
         requirement = "\n".join(lines).strip()
-        if not requirement:
-            print("错误: 需求不能为空")
-            sys.exit(1)
     elif args.file:
         fpath = Path(args.file)
         if not fpath.exists():
             print(f"错误: 文件不存在: {fpath}")
             sys.exit(1)
         requirement = fpath.read_text(encoding="utf-8").strip()
-        if not requirement:
-            print(f"错误: 文件为空: {fpath}")
-            sys.exit(1)
-    else:
+    elif args.requirement:
         requirement = args.requirement.strip()
-        if not requirement:
-            print("错误: 需求不能为空")
-            sys.exit(1)
+
+    if not requirement:
+        parser.print_help()
+        sys.exit(1)
 
     # ── Override max iterations if provided ─────────────────────────
     if args.max_iterations is not None:
@@ -84,7 +95,6 @@ def main():
     session = SessionStore()
     orchestrator = Orchestrator(session=session, model_name=args.model)
 
-    # Use the new Claude Code-style console
     from src.ui.console import get_console
     console = get_console()
     console.welcome(
@@ -98,7 +108,6 @@ def main():
     result = orchestrator.run(requirement)
 
     # ── Final output ────────────────────────────────────────────────
-    # Use the last coder report and last review verdict for side-by-side display
     last_coder = result["coder_reports"][-1] if result["coder_reports"] else "(无)"
     last_review = result["review_verdicts"][-1] if result["review_verdicts"] else "(无)"
     console.final_result(
@@ -110,7 +119,8 @@ def main():
     )
 
     # Print session file path
-    console.print(f"\n📁 会话文件: {workspace / settings.session_dir / f'session_{result["session_id"]}.json'}")
+    session_file = SESSION_DIR / f'session_{result["session_id"]}.json'
+    console.print(f"\n📁 会话文件: {session_file}")
 
     # ── Exit ─────────────────────────────────────────────────────────
     console.print("[dim]工作流已完成，程序退出。[/]")

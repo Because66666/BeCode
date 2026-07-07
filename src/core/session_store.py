@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from src.core.config import settings
+from src.core.config import SESSION_DIR
 
 
 class SessionStore:
@@ -23,7 +23,7 @@ class SessionStore:
 
     def __init__(self, session_id: Optional[str] = None):
         self.session_id = session_id or str(uuid.uuid4())[:8]
-        self._base: Path = Path(settings.session_dir).resolve()
+        self._base: Path = SESSION_DIR
         self._base.mkdir(parents=True, exist_ok=True)
         self._file: Path = self._base / f"session_{self.session_id}.json"
         self._data: dict[str, Any] = self._load_or_create()

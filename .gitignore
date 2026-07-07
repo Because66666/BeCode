@@ -4,3 +4,12 @@ __pycache__/
 .claude/
 .hybrid/
 .env
+
+# Build artifacts
+build/
+dist/
+*.spec
+becode_venv/
+inno_setup.exe
+installer/inno_setup.exe
+installer/BeCode_Setup*.exe
