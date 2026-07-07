@@ -26,7 +26,7 @@ test_py_output.txt    # 测试输出文件
 # ============================================
 # 环境变量与私密配置
 # ============================================
-.env                  # API Key、模型配置等敏感环境变量
+.env                  # API Key, 模型配置等敏感环境变量
 
 # ============================================
 # 构建产物（PyInstaller + Inno Setup）
@@ -42,6 +42,21 @@ becode_venv/           # 项目虚拟环境目录
 inno_setup.exe                 # Inno Setup 编译器本体（若下载到根目录）
 installer/inno_setup.exe       # Inno Setup 编译器本体（若下载到 installer 目录）
 installer/BeCode_Setup*.exe    # 生成的安装程序安装包
+
+# ============================================
+# 测试/临时残留目录和文件（不应提交到公开仓库）
+# ============================================
+test_gitignore/       # .gitignore 测试残留目录
+testignoretest/       # 忽略规则测试残留目录
+test_new_repo/        # 新仓库测试残留目录
+.gitignore.new        # .gitignore 草稿/备份文件
+.gitignore_test       # .gitignore 测试文件
+test_file.txt         # 临时测试文件
+
+# ============================================
+# 打包产物内部残留（被 PyInstaller 打包进去的敏感文件）
+# ============================================
+dist/becode/_internal/.env   # 构建产物内残留的 .env 文件
 
 # ============================================
 # 操作系统特定文件
