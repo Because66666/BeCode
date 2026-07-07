@@ -1,65 +1,65 @@
 # ============================================
 # Python 缓存和临时文件
 # ============================================
-__pycache__/          # Python 字节码缓存
-*.pyc                # Python 编译文件
-*.pyo                # Python 优化编译文件
-*.pyd               # Python 动态库 (Windows)
-*.log                # 日志文件
-*.tmp                # 临时文件
-*.swp                # Vim 临时交换文件
-*.bak                # 备份文件
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.tmp
+*.swp
+*.bak
 
 # ============================================
 # 运行时数据 / 会话记录（含用户敏感信息）
 # ============================================
-sessions/             # 用户会话记录，含对话内容及工具调用日志
-test_py_output.txt    # 测试输出文件
+sessions/
+test_py_output.txt
 
 # ============================================
 # AI 智能体工作流中间产物（不对外公开）
 # ============================================
-.claude/              # Claude AI 工作区元数据
-.hybrid/              # 混合智能体工作流中间状态
-.trae/                # Trae IDE 项目配置和计划文档
+.claude/
+.hybrid/
+.trae/
 
 # ============================================
 # 环境变量与私密配置
 # ============================================
-.env                  # API Key, 模型配置等敏感环境变量
+.env
 
 # ============================================
 # 构建产物（PyInstaller + Inno Setup）
 # ============================================
-build/                # PyInstaller 构建中间目录
-dist/                 # 打包输出目录（.exe / installer）
-*.spec                # PyInstaller spec 文件（自动生成，不必提交）
-becode_venv/           # 项目虚拟环境目录
+build/
+dist/
+*.spec
+becode_venv/
 
 # ============================================
 # 安装程序依赖及输出
 # ============================================
-inno_setup.exe                 # Inno Setup 编译器本体（若下载到根目录）
-installer/inno_setup.exe       # Inno Setup 编译器本体（若下载到 installer 目录）
-installer/BeCode_Setup*.exe    # 生成的安装程序安装包
+inno_setup.exe
+installer/inno_setup.exe
+installer/BeCode_Setup*.exe
 
 # ============================================
 # 测试/临时残留目录和文件（不应提交到公开仓库）
 # ============================================
-test_gitignore/       # .gitignore 测试残留目录
-testignoretest/       # 忽略规则测试残留目录
-test_new_repo/        # 新仓库测试残留目录
-.gitignore.new        # .gitignore 草稿/备份文件
-.gitignore_test       # .gitignore 测试文件
-test_file.txt         # 临时测试文件
+test_gitignore/
+testignoretest/
+test_new_repo/
+.gitignore.new
+.gitignore_test
+test_file.txt
 
 # ============================================
 # 打包产物内部残留（被 PyInstaller 打包进去的敏感文件）
 # ============================================
-dist/becode/_internal/.env   # 构建产物内残留的 .env 文件
+dist/becode/_internal/.env
 
 # ============================================
 # 操作系统特定文件
 # ============================================
-.DS_Store             # macOS 资源文件
-Thumbs.db             # Windows 缩略图缓存
+.DS_Store
+Thumbs.db
