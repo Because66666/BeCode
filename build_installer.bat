@@ -106,9 +106,10 @@ echo [OK] 版本号已更新为 %NEW_VERSION%
 
 :: ---------- 4. 运行 PyInstaller 打包 ----------
 echo [INFO] 正在运行 PyInstaller 打包...
-call pyinstaller becode.spec --noconfirm --clean >nul 2>&1
+echo [INFO] 执行: pyinstaller becode.spec --noconfirm --clean
+call pyinstaller becode.spec --noconfirm --clean
 if errorlevel 1 (
-    echo [ERROR] PyInstaller 打包失败！
+    echo [ERROR] PyInstaller 打包失败！请查看上方错误信息。
     pause
     exit /b 1
 )
@@ -116,9 +117,10 @@ echo [OK] PyInstaller 打包完成
 
 :: ---------- 5. 运行 Inno Setup 生成安装包 ----------
 echo [INFO] 正在生成安装包...
-"%ISCC_PATH%" "%ISS_FILE%" /Q >nul 2>&1
+echo [INFO] 执行: "%ISCC_PATH%" "%ISS_FILE%"
+"%ISCC_PATH%" "%ISS_FILE%"
 if errorlevel 1 (
-    echo [ERROR] Inno Setup 打包失败！
+    echo [ERROR] Inno Setup 打包失败！请查看上方错误信息。
     pause
     exit /b 1
 )
