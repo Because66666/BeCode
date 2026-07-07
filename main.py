@@ -258,7 +258,7 @@ def main():
 
     # ── Hello ────────────────────────────────────────────────────────
     if args.hello:
-        print("hello world")
+        print("hello world test")
         sys.exit(0)
 
     # ── Execute ───────────────────────────────────────────────────────
