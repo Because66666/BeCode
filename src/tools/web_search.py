@@ -6,6 +6,15 @@ Provides two tools:
 
 Both tools are wrapped as LangChain @tool decorators so they can be
 registered directly into the agent's tool list.
+
+╔══════════════════════════════════════════════════╗
+║  Learned Workspace Facts                        ║
+║  - web_search: 基于 Bing 搜索, HTML scraping,   ║
+║    解析 li.b_algo 结果                           ║
+║  - web_fetch: 基于 requests+BeautifulSoup 的     ║
+║    网页内容提取                                   ║
+║  - 注册在 src/tools/web_search.py 中             ║
+╚══════════════════════════════════════════════════╝
 """
 
 import logging

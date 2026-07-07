@@ -5,6 +5,19 @@ Provides a Claude Code-style terminal interface with:
 - Compact 3-line tool call display
 - Real-time command output rendering
 - Clean visual separation between agent thinking, tool usage, and results
+
+╔══════════════════════════════════════════════════╗
+║  Learned Workspace Facts                        ║
+║  - tool_call() 方法只展示三行: 工具名称、参数、  ║
+║    执行结果（单行截断 ≤100 字符）。              ║
+║    移除了 tool_call_start / tool_call_end。      ║
+║  - final_result() 移除了并排 Table，仅保留       ║
+║    紧凑统计信息 Panel。                          ║
+║  - 移除了 enter_interactive_mode() 方法。        ║
+║  - interactive_prompt() 支持平台特定的可编辑     ║
+║    预填：Windows 用 kernel32.WriteConsoleInputW, ║
+║    Unix/macOS 用 readline.set_startup_hook。     ║
+╚══════════════════════════════════════════════════╝
 """
 
 import sys

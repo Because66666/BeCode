@@ -8,6 +8,14 @@ Flow:
      c. If PASS → exit
      d. If FAIL → extract feedback → back to (a)
   3. Return final outcome.
+
+╔══════════════════════════════════════════════════╗
+║  Learned Workspace Facts                        ║
+║  - run() 在每次 Coder/Reviewer 运行后，将工具   ║
+║    调用列表通过 metadata={"tool_calls": [...]}   ║
+║    传入 session.add_entry()，持久化到 session    ║
+║    JSON 的 history[].metadata.tool_calls 字段。  ║
+╚══════════════════════════════════════════════════╝
 """
 
 import logging

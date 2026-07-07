@@ -1,6 +1,14 @@
 """Application configuration loaded from .env file.
 
 Data directory: ~/.becode/  — all runtime files (sessions, .env) are stored here.
+
+╔══════════════════════════════════════════════════╗
+║  Learned Workspace Facts                        ║
+║  - BECODE_HOME = ~/.becode/                     ║
+║  - SESSION_DIR = ~/.becode/sessions/            ║
+║  - .env 优先从 ~/.becode/ 加载，首次运行自动    ║
+║    创建默认配置。                                ║
+╚══════════════════════════════════════════════════╝
 """
 
 import os

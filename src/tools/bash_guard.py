@@ -7,6 +7,12 @@ Architecture
    judges the command string semantically.
 
 If EITHER layer rejects, the command is blocked.
+
+╔══════════════════════════════════════════════════╗
+║  Learned Workspace Facts                        ║
+║  - BASH_GUARD_LLM_DISABLED=1 环境变量可跳过     ║
+║    LLM 审查层（用于测试或无 API Key 环境）。     ║
+╚══════════════════════════════════════════════════╝
 """
 
 import json

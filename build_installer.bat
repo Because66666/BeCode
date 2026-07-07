@@ -9,6 +9,14 @@ title BeCode 一键打包工具
 ::   2. 运行 PyInstaller 打包 .exe
 ::   3. 运行 Inno Setup 编译器生成安装包
 ::   4. 输出文件：dist\install.exe
+::
+:: ╔══════════════════════════════════════════════════╗
+:: ║  Learned Workspace Facts                        ║
+:: ║  - 自动读取 installer/becode_setup.iss 中的    ║
+:: ║    版本号，按 0~9 进位规则递增                  ║
+:: ║  - 依次执行 PyInstaller + Inno Setup ISCC       ║
+:: ║  - 前置依赖检测：自动搜索 ISCC.exe 常见路径    ║
+:: ╚══════════════════════════════════════════════════╝
 :: ============================================
 
 setlocal enabledelayedexpansion

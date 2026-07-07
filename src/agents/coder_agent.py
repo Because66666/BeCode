@@ -6,6 +6,12 @@ implement the solution.  After finishing, it produces a natural-language
 report describing what was done.
 
 Uses ``create_agent`` from ``langchain.agents`` (LangGraph-based).
+
+╔══════════════════════════════════════════════════╗
+║  Learned Workspace Facts                        ║
+║  - 工具列表已包含 web_search 和 web_fetch，      ║
+║    系统提示词也已同步更新。                      ║
+╚══════════════════════════════════════════════════╝
 """
 
 import logging

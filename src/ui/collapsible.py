@@ -3,6 +3,16 @@
 Provides a simple section storage where output sections
 (file contents, command output, agent reports, review verdicts) are
 registered for potential rendering.  No interactive / keyboard features.
+
+╔══════════════════════════════════════════════════╗
+║  Learned Workspace Facts                        ║
+║  - 完全移除了 threading、keyboard 依赖、         ║
+║    _keyboard_listener()、start_interactive()、   ║
+║    toggle_last()/toggle_all()、COLLAPSE_HINT     ║
+║    以及 rich.live.Live 的使用。                  ║
+║  - CollapsibleDisplay 简化为纯 section 存储容器， ║
+║    不再依赖 keyboard、threading、rich.live.Live。 ║
+╚══════════════════════════════════════════════════╝
 """
 
 from typing import Any, Optional

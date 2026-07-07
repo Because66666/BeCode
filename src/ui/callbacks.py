@@ -2,6 +2,17 @@
 
 Captures tool invocations during agent execution and displays them
 in real-time through the AgentConsole UI.
+
+╔══════════════════════════════════════════════════╗
+║  Learned Workspace Facts                        ║
+║  - content='' 显示问题修复: LangChain 0.3+ 的   ║
+║    on_tool_end callback 传递的是 ToolMessage     ║
+║    对象而非纯字符串。修复: _extract_tool_output() ║
+║    函数优先使用 .content 属性。                  ║
+║  - ToolCallCapture 新增 _tool_calls 累加器和     ║
+║    get_tool_calls() 方法，在 on_tool_start 中    ║
+║    记录工具名和参数（不含响应）。                 ║
+╚══════════════════════════════════════════════════╝
 """
 
 import logging

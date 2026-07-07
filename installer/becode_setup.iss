@@ -1,6 +1,14 @@
 ; BeCode Installer Script for Inno Setup
 ; https://jrsoftware.org/isinfo.php
 
+; ╔══════════════════════════════════════════════════╗
+; ║  Learned Workspace Facts                        ║
+; ║  - [Languages] 节配置了三语言：chinesesimp      ║
+; ║    （默认，排在首位）、chinesetrad（繁体中文）、 ║
+; ║    english（英文）。Inno Setup 会使用第一个      ║
+; ║    语言作为安装向导的默认显示语言。              ║
+; ╚══════════════════════════════════════════════════╝
+
 #define MyAppName "BeCode"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "BeCode Team"

@@ -7,6 +7,15 @@ Usage:
     becode                            # 无参数 → 进入交互式对话模式
 
 Data directory: ~/.becode/  — sessions, .env, and logs are stored here.
+
+╔══════════════════════════════════════════════════╗
+║  Learned Workspace Facts                        ║
+║  - --hello 参数: 输出 "hello world test" 后退出 ║
+║  - -e/--execute 参数: 执行命令 (如 .exit) 后退出 ║
+║  - Ctrl+C 修复: 移除全局 _has_formal_output 标志, ║
+║    由 orchestrator.run_interactive() 通过返回     ║
+║    dict 的 interrupted/has_formal_output 字段传递 ║
+╚══════════════════════════════════════════════════╝
 """
 
 import argparse

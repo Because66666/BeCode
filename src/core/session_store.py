@@ -7,6 +7,13 @@ after an interruption.
 Each history entry may include ``metadata.tool_calls`` — a list of
 tool invocations (name + arguments, without responses) made during
 that agent round.
+
+╔══════════════════════════════════════════════════╗
+║  Learned Workspace Facts                        ║
+║  - 通过 metadata={"tool_calls": [...]} 传入      ║
+║    session.add_entry()，持久化到 session JSON    ║
+║    的 history[].metadata.tool_calls 字段。       ║
+╚══════════════════════════════════════════════════╝
 """
 
 import json

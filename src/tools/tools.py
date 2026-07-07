@@ -4,6 +4,15 @@ Three tools:
 1. read_file   — read a file's content from disk
 2. edit_file   — apply an exact-string-replacement edit to a file
 3. bash_exec   — run a bash command (goes through BashGuard first)
+
+╔══════════════════════════════════════════════════╗
+║  Learned Workspace Facts                        ║
+║  - edit_file 自动创建文件优化: 文件不存在时，    ║
+║    检查父目录是否存在；如果父目录存在，则自动    ║
+║    创建空文件后再执行替换逻辑（old_string=""     ║
+║    时匹配空文件内容）；如果父目录也不存在，      ║
+║    则返回"文件路径不存在"错误。                  ║
+╚══════════════════════════════════════════════════╝
 """
 
 import logging
