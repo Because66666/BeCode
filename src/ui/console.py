@@ -34,6 +34,124 @@ def get_console() -> "AgentConsole":
     return _console
 
 
+# ── Platform-specific Prefill Input Helpers ────────────────────────
+
+
+def _unix_prefill_input(prompt_text: str, prefill: str) -> str:
+    """Use ``readline`` to pre-fill text on Unix / macOS.
+
+    The text appears at the prompt ready for the user to edit.
+    """
+    try:
+        import readline  # noqa: F401
+    except ImportError:
+        # Fallback: just print the hint (no editable pre-fill)
+        print(f"\n💬 {prompt_text} {prefill}", end="")
+        return input().strip()
+
+    def hook():
+        readline.insert_text(prefill)
+
+    readline.set_startup_hook(hook)
+    try:
+        return input(f"\n[bold cyan]💬 {prompt_text}[/] ").strip()
+    finally:
+        readline.set_startup_hook()
+
+
+def _win32_prefill_input(prompt_text: str, prefill: str) -> str:
+    """Pre-fill text into the console input buffer on Windows.
+
+    Uses ``WriteConsoleInputA`` to inject each character as a key-down
+    event so that the text appears at the prompt and the user can edit it.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.windll.kernel32
+
+    STD_INPUT_HANDLE = -10
+    h_stdin = kernel32.GetStdHandle(STD_INPUT_HANDLE)
+
+    # ── Write the prompt first ──────────────────────────────────────
+    print()
+    sys.stdout.write(f"💬 {prompt_text} ")
+    sys.stdout.flush()
+
+    # ── Write each character as a key-down INPUT_RECORD ──────────────
+    # typedef struct _INPUT_RECORD {
+    #     WORD  EventType;
+    #     union {
+    #         KEY_EVENT_RECORD   KeyEvent;
+    #         MOUSE_EVENT_RECORD MouseEvent;
+    #         WINDOW_BUFFER_SIZE_RECORD WindowBufferSizeEvent;
+    #         MENU_EVENT_RECORD  MenuEvent;
+    #     } Event;
+    # } INPUT_RECORD;
+    #
+    # EventType: 1 = KEY_EVENT
+    #
+    # typedef struct _KEY_EVENT_RECORD {
+    #     BOOL  bKeyDown;
+    #     WORD  wRepeatCount;
+    #     WORD  wVirtualKeyCode;
+    #     WORD  wVirtualScanCode;
+    #     union {
+    #         WCHAR UnicodeChar;
+    #         CHAR  AsciiChar;
+    #     } uChar;
+    #     DWORD dwControlKeyState;
+    # } KEY_EVENT_RECORD;
+
+    class KEY_EVENT_RECORD(ctypes.Structure):
+        _fields_ = [
+            ("bKeyDown", wintypes.BOOL),
+            ("wRepeatCount", wintypes.WORD),
+            ("wVirtualKeyCode", wintypes.WORD),
+            ("wVirtualScanCode", wintypes.WORD),
+            ("uChar", wintypes.WCHAR),
+            ("dwControlKeyState", wintypes.DWORD),
+        ]
+
+    class EVENT_U(ctypes.Union):
+        _fields_ = [("KeyEvent", KEY_EVENT_RECORD)]
+
+    class INPUT_RECORD(ctypes.Structure):
+        _fields_ = [
+            ("EventType", wintypes.WORD),
+            ("Event", EVENT_U),
+        ]
+
+    INPUT_RECORD_SIZE = ctypes.sizeof(INPUT_RECORD)
+
+    # Build an array of INPUT_RECORDs — one key-down per character
+    records = []
+    for ch in prefill:
+        rec = INPUT_RECORD()
+        rec.EventType = 1  # KEY_EVENT
+        rec.Event.KeyEvent.bKeyDown = True
+        rec.Event.KeyEvent.wRepeatCount = 1
+        rec.Event.KeyEvent.wVirtualKeyCode = 0
+        rec.Event.KeyEvent.wVirtualScanCode = 0
+        rec.Event.KeyEvent.uChar = ch
+        rec.Event.KeyEvent.dwControlKeyState = 0
+        records.append(rec)
+
+    if records:
+        n_written = wintypes.DWORD(0)
+        ArrayType = INPUT_RECORD * len(records)
+        arr = ArrayType(*records)
+        kernel32.WriteConsoleInputW(
+            h_stdin,
+            ctypes.byref(arr),
+            len(records),
+            ctypes.byref(n_written),
+        )
+
+    # ── Now read the input (pre-filled text is already in buffer) ────
+    return input().strip()
+
+
 class AgentConsole:
     """Styled terminal output mimicking Claude Code's interface."""
 
@@ -93,26 +211,40 @@ class AgentConsole:
         self._console.print()
 
     def interactive_prompt(self, prompt_text: str = "请输入需求:", prefill: str = "") -> str:
-        """Show an interactive input prompt with optional pre-fill hint.
+        """Show an interactive input prompt with optional editable pre-fill.
+
+        On Ctrl+C return in a prior round, the *previous* user input is
+        pre-filled into the input buffer so the user can edit it directly.
 
         Args:
             prompt_text: The prompt message to display.
-            prefill: Previous user input to show as a hint (on Ctrl+C return).
+            prefill: Previous user input to pre-fill (editable by user).
 
         Returns:
             The user's input string (may be empty).
         """
-        if prefill:
-            self._console.print(
-                Text.from_markup(
-                    f"[dim italic]💡 上次输入 (可参考): \"{prefill}\"[/]"
-                )
-            )
         try:
-            return input(f"\n[bold cyan]💬 {prompt_text}[/] ").strip()
+            if prefill:
+                user_input = self._prefill_input(prompt_text, prefill)
+            else:
+                user_input = input(f"\n[bold cyan]💬 {prompt_text}[/] ").strip()
+            return user_input
         except KeyboardInterrupt:
-            # Signal handler will be managed at the top level
             raise
+
+    # ── Platform-specific prefill helpers ──────────────────────────────
+
+    @staticmethod
+    def _prefill_input(prompt_text: str, prefill: str) -> str:
+        """Get input with the given text pre-filled into the input buffer.
+
+        The pre-filled text appears at the prompt and the user can edit it
+        freely (cursor at end of text).
+        """
+        if sys.platform == "win32":
+            return _win32_prefill_input(prompt_text, prefill)
+        else:
+            return _unix_prefill_input(prompt_text, prefill)
 
     def show_interrupt_message(self, has_output: bool = False):
         """Display a Ctrl+C interrupt message."""

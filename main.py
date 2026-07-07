@@ -239,6 +239,7 @@ def main():
     )
     parser.add_argument("--version", "-v", action="store_true", help="显示版本信息")
     parser.add_argument("--hello", action="store_true", help="输出 hello world 并退出")
+    parser.add_argument("-e", "--execute", type=str, help="执行指定命令 (如 .exit) 并退出")
     src_grp = parser.add_mutually_exclusive_group()
     src_grp.add_argument("requirement", nargs="?", help="需求文本 (直接传入)")
     src_grp.add_argument("--file", "-f", type=str, help="从文件读取需求")
@@ -259,6 +260,16 @@ def main():
     if args.hello:
         print("hello world")
         sys.exit(0)
+
+    # ── Execute ───────────────────────────────────────────────────────
+    if args.execute is not None:
+        cmd = args.execute.strip()
+        if cmd == ".exit":
+            print("执行 .exit 命令 — 退出程序。")
+            sys.exit(0)
+        else:
+            print(f"未知命令: {cmd}")
+            sys.exit(1)
 
     # ── Ensure data directory exists ────────────────────────────────
     BECODE_HOME.mkdir(parents=True, exist_ok=True)

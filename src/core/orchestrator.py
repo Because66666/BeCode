@@ -55,6 +55,7 @@ class Orchestrator:
               - coder_reports: list[str]
               - review_verdicts: list[str]
               - interrupted: bool  (True if Ctrl+C was caught)
+              - has_formal_output: bool  (True if partial LLM output exists)
         """
         # Build the enriched requirement with previous task summaries
         enriched_requirement = requirement
@@ -69,26 +70,66 @@ class Orchestrator:
                 f"{summary_block}\n"
             )
 
-        # Run the standard workflow
-        result = self.run(enriched_requirement)
+        # Track whether we have formal output before any interruption
+        has_formal_output = False
+        interrupted = False
+        result = None
 
-        # Generate a one-line summary of this round
-        if result["success"] and result.get("coder_reports"):
-            from src.core.llm_client import summarize_completion
-            try:
-                last_coder = result["coder_reports"][-1]
-                one_line = summarize_completion(
-                    requirement=requirement,
-                    coder_report=last_coder,
-                    model=self.model_name,
+        try:
+            # Run the standard workflow
+            result = self.run(enriched_requirement)
+            has_formal_output = bool(
+                result.get("coder_reports") and result["coder_reports"][-1]
+            )
+        except KeyboardInterrupt:
+            interrupted = True
+            # Check if partial results exist in the session
+            if result is None:
+                # Create a minimal result dict for interrupted state
+                result = {
+                    "success": False,
+                    "summary": "被中断",
+                    "total_turns": 0,
+                    "session_id": self.session.session_id,
+                    "coder_reports": [],
+                    "review_verdicts": [],
+                }
+            else:
+                has_formal_output = bool(
+                    result.get("coder_reports") and result["coder_reports"][-1]
                 )
-            except Exception:
-                one_line = f"已完成: {requirement[:60]}..."
+
+        if result is None:
+            result = {
+                "success": False,
+                "summary": "未知错误",
+                "total_turns": 0,
+                "session_id": self.session.session_id,
+                "coder_reports": [],
+                "review_verdicts": [],
+            }
+
+        # Generate a one-line summary of this round (only if not interrupted or has output)
+        if not interrupted or has_formal_output:
+            if result.get("success") and result.get("coder_reports"):
+                from src.core.llm_client import summarize_completion
+                try:
+                    last_coder = result["coder_reports"][-1]
+                    one_line = summarize_completion(
+                        requirement=requirement,
+                        coder_report=last_coder,
+                        model=self.model_name,
+                    )
+                except Exception:
+                    one_line = f"已完成: {requirement[:60]}..."
+            else:
+                one_line = f"部分完成（未通过审查）: {requirement[:60]}..."
         else:
-            one_line = f"部分完成（未通过审查）: {requirement[:60]}..."
+            one_line = ""
 
         result["one_line_summary"] = one_line
-        result["interrupted"] = False
+        result["interrupted"] = interrupted
+        result["has_formal_output"] = has_formal_output
         return result
 
     def run(self, requirement: str) -> dict:

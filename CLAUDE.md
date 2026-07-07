@@ -39,4 +39,5 @@
 - **交互模式 Ctrl+C 修复**: `main.py` 移除了全局 `_has_formal_output` 标志，改为由 `orchestrator.run_interactive()` 通过返回值 `dict` 的 `interrupted` 和 `has_formal_output` 字段传递中断状态。`result` 变量在使用前已初始化为 `None`。
 - **可编辑预填输入**: `console.py` 的 `interactive_prompt()` 支持平台特定的可编辑预填：Windows 上使用 `kernel32.WriteConsoleInputW` 注入按键事件，Unix/macOS 上使用 `readline.set_startup_hook` + `insert_text`。预填文本在输入框中出现且用户可直接编辑（光标在末尾）。
 - **Hello World 实现**: `hello_world.py` 是独立的 Hello World 脚本，运行 `python hello_world.py` 输出 `hello world`。`main.py` 的 `--hello` 参数（`python main.py --hello`）输出 `hello world` 后立即退出，不影响其他参数功能。
+- **`-e` / `--execute` 参数**: `main.py` 新增 `-e`/`--execute` 命令行参数，运行 `python main.py -e ".exit"` 执行 `.exit` 命令后退出程序。目前仅支持 `.exit` 命令（退出程序），未知命令会以 exit code 1 报错。该参数在 `--hello` 之后、数据目录初始化之前处理，与 `--hello` 等参数不冲突。
 
