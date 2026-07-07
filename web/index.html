@@ -1,0 +1,1560 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BeCode · 会话查看器</title>
+<link rel="stylesheet" href="assets/fonts.css">
+<script src="assets/marked.min.js"></script>
+<script src="assets/purify.min.js"></script>
+<style>
+  :root {
+    --bg: #FFFFFF;
+    --bg-tint: #F4F8FE;
+    --bg-sunken: #EEF4FC;
+    --surface: #FFFFFF;
+    --surface-hover: #F8FBFF;
+    --border: #DCE7F3;
+    --border-strong: #C5D6EA;
+    --text: #0B1F33;
+    --text-soft: #3B4E63;
+    --text-muted: #6B7E94;
+    --text-faint: #9AABC0;
+
+    --accent: #5B9FE0;
+    --accent-deep: #2563EB;
+    --accent-soft: #DCEBFB;
+    --accent-glow: rgba(91, 159, 224, 0.18);
+
+    --coder: #5B9FE0;
+    --coder-soft: #E3EFFC;
+    --reviewer: #C98B4B;
+    --reviewer-soft: #F7EEDF;
+
+    --ok: #10B981;
+    --ok-soft: #D6F3E7;
+    --running: #5B9FE0;
+    --running-soft: #E3EFFC;
+    --fail: #E05252;
+    --fail-soft: #FBE3E3;
+
+    --shadow-sm: 0 1px 2px rgba(11, 31, 51, 0.04), 0 1px 1px rgba(11, 31, 51, 0.03);
+    --shadow-md: 0 4px 14px rgba(11, 31, 51, 0.06), 0 1px 3px rgba(11, 31, 51, 0.04);
+    --shadow-lg: 0 12px 40px rgba(11, 31, 51, 0.08), 0 2px 6px rgba(11, 31, 51, 0.04);
+
+    --radius-sm: 6px;
+    --radius: 10px;
+    --radius-lg: 14px;
+
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+
+  body {
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--text);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
+  }
+
+  /* Subtle dot grid texture on the whole page */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image: radial-gradient(circle at 1px 1px, rgba(91, 159, 224, 0.10) 1px, transparent 0);
+    background-size: 22px 22px;
+    opacity: 0.55;
+    z-index: 0;
+  }
+
+  /* === Layout === */
+  .app {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    height: 100vh;
+  }
+
+  /* === Header === */
+  header.topbar {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 14px 22px;
+    background: rgba(255, 255, 255, 0.86);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    z-index: 10;
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .brand-mark {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 22px;
+    font-style: italic;
+    letter-spacing: -0.01em;
+    color: var(--text);
+  }
+  .brand-mark::first-letter { color: var(--accent-deep); }
+  .brand-sub {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--text-faint);
+    font-weight: 500;
+  }
+
+  .path-bar {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-tint);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 10px 6px 12px;
+    transition: border-color .15s, box-shadow .15s, background .15s;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  .path-bar:focus-within {
+    border-color: var(--accent);
+    background: var(--surface);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+  .path-bar .ico {
+    color: var(--text-faint);
+    flex-shrink: 0;
+  }
+  .path-btn {
+    flex: 1;
+    border: none;
+    background: transparent;
+    outline: none;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    color: var(--text);
+    min-width: 0;
+    text-align: left;
+    cursor: pointer;
+    padding: 2px 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .path-btn:hover { color: var(--accent-deep); }
+  .path-btn .dir-prompt { color: var(--text-faint); font-style: italic; }
+  .path-hint {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-faint);
+    flex-shrink: 0;
+    padding-left: 8px;
+    border-left: 1px solid var(--border);
+    margin-left: 4px;
+  }
+
+  .top-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .icon-btn {
+    width: 32px; height: 32px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-soft);
+    transition: all .15s;
+  }
+  .icon-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent-deep);
+    background: var(--accent-soft);
+  }
+  .icon-btn svg { width: 15px; height: 15px; }
+
+  /* === Main grid === */
+  .main {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* === Sidebar === */
+  aside.sidebar {
+    border-right: 1px solid var(--border);
+    background: linear-gradient(180deg, var(--bg-tint) 0%, var(--bg) 100%);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .sidebar-head {
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,0.6);
+  }
+  .sidebar-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .sidebar-title h2 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-style: italic;
+    font-size: 16px;
+    color: var(--text);
+    letter-spacing: -0.005em;
+  }
+  .count-pill {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text-muted);
+    background: var(--bg-sunken);
+    padding: 2px 7px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    font-weight: 500;
+  }
+
+  .search-wrap {
+    position: relative;
+  }
+  .search-wrap svg {
+    position: absolute;
+    left: 9px; top: 50%;
+    transform: translateY(-50%);
+    width: 13px; height: 13px;
+    color: var(--text-faint);
+    pointer-events: none;
+  }
+  .search-wrap input {
+    width: 100%;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: var(--radius-sm);
+    padding: 7px 10px 7px 28px;
+    font-size: 12.5px;
+    font-family: var(--font-body);
+    color: var(--text);
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .search-wrap input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+
+  .session-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 8px 16px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  .session-list::-webkit-scrollbar { width: 8px; }
+  .session-list::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .session-list::-webkit-scrollbar-thumb:hover { background: var(--accent); background-clip: content-box; }
+
+  .session-item {
+    padding: 10px 11px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    border: 1px solid transparent;
+    margin-bottom: 2px;
+    transition: all .12s;
+    position: relative;
+  }
+  .session-item:hover {
+    background: var(--surface-hover);
+    border-color: var(--border);
+  }
+  .session-item.active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent-glow);
+  }
+  .session-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 10px; bottom: 10px;
+    width: 3px;
+    background: var(--accent-deep);
+    border-radius: 0 2px 2px 0;
+  }
+
+  .si-row1 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .si-id {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+  .session-item.active .si-id { color: var(--accent-deep); }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .status-dot.running { background: var(--running); box-shadow: 0 0 0 3px var(--running-soft); animation: pulse 1.8s ease-in-out infinite; }
+  .status-dot.completed { background: var(--ok); }
+  .status-dot.failed { background: var(--fail); }
+  .status-dot.unknown { background: var(--text-faint); }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 3px var(--running-soft); }
+    50% { box-shadow: 0 0 0 6px rgba(91, 159, 224, 0.1); }
+  }
+
+  .si-meta {
+    margin-left: auto;
+    font-size: 10.5px;
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+  }
+
+  .si-req {
+    font-size: 12px;
+    color: var(--text-soft);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+  }
+
+  .si-foot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 10.5px;
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+  }
+  .si-foot .sep { opacity: 0.4; }
+
+  .sidebar-empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 12.5px;
+  }
+
+  /* === Detail === */
+  article.detail {
+    overflow-y: auto;
+    background: var(--bg);
+    position: relative;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  article.detail::-webkit-scrollbar { width: 10px; }
+  article.detail::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 5px;
+    border: 3px solid var(--bg);
+    background-clip: content-box;
+  }
+  article.detail::-webkit-scrollbar-thumb:hover { background: var(--accent); background-clip: content-box; }
+
+  .detail-inner {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 32px 44px 80px;
+  }
+
+  /* Empty state */
+  .empty-state {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px;
+    color: var(--text-muted);
+  }
+  .empty-state .glyph {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 88px;
+    font-weight: 400;
+    color: var(--accent-soft);
+    line-height: 1;
+    margin-bottom: 16px;
+    position: relative;
+  }
+  .empty-state .glyph::after {
+    content: '';
+    position: absolute;
+    left: 50%; bottom: -8px;
+    transform: translateX(-50%);
+    width: 40px; height: 2px;
+    background: var(--accent);
+    opacity: 0.4;
+  }
+  .empty-state h3 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-style: italic;
+    font-size: 22px;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .empty-state p {
+    font-size: 13.5px;
+    max-width: 360px;
+    line-height: 1.6;
+  }
+
+  /* Session header */
+  .session-header {
+    margin-bottom: 28px;
+    padding-bottom: 22px;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+  .session-header::after {
+    content: '';
+    position: absolute;
+    left: 0; bottom: -1px;
+    width: 80px; height: 2px;
+    background: var(--accent-deep);
+  }
+
+  .sh-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .sh-id {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: var(--bg-sunken);
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  .sh-status {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 4px 10px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .sh-status.running { color: var(--running); background: var(--running-soft); }
+  .sh-status.completed { color: var(--ok); background: var(--ok-soft); }
+  .sh-status.failed { color: var(--fail); background: var(--fail-soft); }
+  .sh-status.unknown { color: var(--text-muted); background: var(--bg-sunken); }
+  .sh-status .status-dot { width: 6px; height: 6px; }
+
+  .sh-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 28px;
+    line-height: 1.3;
+    color: var(--text);
+    letter-spacing: -0.015em;
+    margin-bottom: 10px;
+  }
+  .sh-title .label {
+    font-style: italic;
+    color: var(--accent-deep);
+    font-weight: 500;
+  }
+
+  .sh-req {
+    font-size: 14.5px;
+    line-height: 1.65;
+    color: var(--text-soft);
+    background: var(--bg-tint);
+    border-left: 3px solid var(--accent);
+    padding: 12px 16px;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    margin-bottom: 14px;
+  }
+
+  .sh-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .sh-stats .stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+  }
+  .sh-stats .stat svg { width: 13px; height: 13px; opacity: 0.7; }
+  .sh-stats .stat b {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  /* History timeline */
+  .timeline {
+    position: relative;
+    padding-left: 8px;
+  }
+
+  .turn {
+    position: relative;
+    margin-bottom: 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    transition: border-color .15s, box-shadow .15s;
+    animation: turnIn .4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  .turn:hover { border-color: var(--border-strong); box-shadow: var(--shadow-md); }
+  @keyframes turnIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .turn.coder { border-left: 3px solid var(--coder); }
+  .turn.reviewer { border-left: 3px solid var(--reviewer); }
+
+  .turn-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px 10px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, var(--bg-tint) 0%, transparent 100%);
+  }
+
+  .turn-num {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 500;
+    font-size: 26px;
+    color: var(--text-faint);
+    line-height: 1;
+    min-width: 36px;
+    letter-spacing: -0.02em;
+  }
+  .turn.coder .turn-num { color: var(--coder); }
+  .turn.reviewer .turn-num { color: var(--reviewer); }
+
+  .role-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 3px 9px;
+    border-radius: 4px;
+    font-family: var(--font-body);
+  }
+  .role-badge.coder { color: var(--accent-deep); background: var(--coder-soft); }
+  .role-badge.reviewer { color: var(--reviewer); background: var(--reviewer-soft); }
+  .role-badge svg { width: 11px; height: 11px; }
+
+  .turn-time {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-faint);
+  }
+
+  .turn-body {
+    padding: 14px 18px 4px;
+  }
+
+  /* Markdown content */
+  .md { font-size: 13.5px; line-height: 1.7; color: var(--text); word-break: break-word; }
+  .md > *:first-child { margin-top: 0; }
+  .md > *:last-child { margin-bottom: 0; }
+  .md p { margin: 0 0 10px; }
+  .md h1, .md h2, .md h3, .md h4 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    color: var(--text);
+    margin: 18px 0 8px;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+  }
+  .md h1 { font-size: 22px; }
+  .md h2 { font-size: 18px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+  .md h3 { font-size: 15.5px; font-style: italic; }
+  .md h4 { font-size: 13.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+  .md ul, .md ol { margin: 0 0 10px; padding-left: 22px; }
+  .md li { margin: 3px 0; }
+  .md li::marker { color: var(--accent); }
+  .md a { color: var(--accent-deep); text-decoration: none; border-bottom: 1px solid var(--accent-soft); }
+  .md a:hover { border-bottom-color: var(--accent); }
+  .md strong { color: var(--text); font-weight: 700; }
+  .md em { color: var(--text); }
+  .md code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background: var(--bg-sunken);
+    color: var(--accent-deep);
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+  .md pre {
+    background: #0B1F33;
+    color: #E6EDF7;
+    padding: 14px 16px;
+    border-radius: var(--radius);
+    overflow-x: auto;
+    margin: 0 0 12px;
+    font-size: 12px;
+    line-height: 1.6;
+    border: 1px solid #1E3553;
+  }
+  .md pre code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+    border: none;
+    font-size: inherit;
+  }
+  .md blockquote {
+    border-left: 3px solid var(--accent);
+    padding: 4px 14px;
+    margin: 0 0 10px;
+    color: var(--text-soft);
+    background: var(--bg-tint);
+    border-radius: 0 6px 6px 0;
+  }
+  .md hr { border: none; border-top: 1px dashed var(--border-strong); margin: 14px 0; }
+  .md table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0 0 12px;
+    font-size: 12.5px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+  .md th, .md td {
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    text-align: left;
+  }
+  .md th { background: var(--bg-tint); font-weight: 600; color: var(--text); }
+  .md td { color: var(--text-soft); }
+  .md tr:nth-child(even) td { background: rgba(244, 248, 254, 0.5); }
+
+  /* Tool calls block */
+  .tools-block {
+    margin: 10px 0 14px;
+    padding: 0;
+    border-top: 1px dashed var(--border);
+    padding-top: 12px;
+  }
+  .tools-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+  .tools-head svg { width: 13px; height: 13px; }
+  .tools-head .count {
+    font-family: var(--font-mono);
+    background: var(--bg-sunken);
+    padding: 1px 7px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    color: var(--text-soft);
+    font-size: 10.5px;
+  }
+  .tools-head .toggle-all {
+    margin-left: auto;
+    font-family: var(--font-body);
+    font-size: 10.5px;
+    text-transform: none;
+    letter-spacing: 0.02em;
+    color: var(--accent-deep);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: background .12s;
+  }
+  .tools-head .toggle-all:hover { background: var(--accent-soft); }
+
+  .tools-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .tool-call {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    overflow: hidden;
+    transition: border-color .12s, background .12s;
+  }
+  .tool-call:hover { border-color: var(--border-strong); }
+  .tool-call.expanded { border-color: var(--accent); background: var(--surface-hover); }
+
+  .tc-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    user-select: none;
+    transition: background .1s;
+  }
+  .tc-head:hover { background: var(--surface-hover); }
+
+  .tc-chev {
+    width: 10px; height: 10px;
+    color: var(--text-faint);
+    transition: transform .18s ease;
+    flex-shrink: 0;
+  }
+  .tool-call.expanded .tc-chev { transform: rotate(90deg); color: var(--accent-deep); }
+
+  .tc-icon {
+    width: 16px; height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  .tc-name {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.01em;
+  }
+  .tool-call.expanded .tc-name { color: var(--accent-deep); }
+
+  .tc-preview {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-faint);
+    margin-left: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 50%;
+  }
+
+  .tc-idx {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-faint);
+    background: var(--bg-sunken);
+    padding: 1px 5px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  .tc-body {
+    display: none;
+    padding: 0 12px 10px 32px;
+    border-top: 1px dashed var(--border);
+    background: var(--bg-tint);
+  }
+  .tool-call.expanded .tc-body { display: block; animation: tcIn .2s ease both; }
+  @keyframes tcIn {
+    from { opacity: 0; transform: translateY(-3px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .tc-arg {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 11.5px;
+  }
+  .tc-arg:last-child { border-bottom: none; }
+  .tc-arg-key {
+    font-family: var(--font-mono);
+    color: var(--accent-deep);
+    font-weight: 600;
+    min-width: 80px;
+    flex-shrink: 0;
+  }
+  .tc-arg-val {
+    font-family: var(--font-mono);
+    color: var(--text-soft);
+    word-break: break-all;
+    white-space: pre-wrap;
+    flex: 1;
+  }
+  .tc-arg-val.long {
+    max-height: 200px;
+    overflow-y: auto;
+    background: #0B1F33;
+    color: #E6EDF7;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid #1E3553;
+    font-size: 11px;
+    line-height: 1.55;
+  }
+
+  /* Error content */
+  .turn-content-error {
+    color: var(--fail);
+    background: var(--fail-soft);
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--fail);
+    font-size: 12.5px;
+    font-family: var(--font-mono);
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #0B1F33;
+    color: white;
+    padding: 10px 18px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    box-shadow: var(--shadow-lg);
+    opacity: 0;
+    pointer-events: none;
+    transition: all .3s cubic-bezier(0.2, 0.7, 0.2, 1);
+    z-index: 100;
+    border: 1px solid #1E3553;
+  }
+  .toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  .toast.error { background: var(--fail); border-color: #B83838; }
+
+  /* Loading */
+  .loading-bar {
+    position: fixed;
+    top: 0; left: 0;
+    height: 2px;
+    background: var(--accent-deep);
+    width: 0;
+    z-index: 200;
+    transition: width .3s ease, opacity .3s;
+    opacity: 0;
+  }
+  .loading-bar.active { opacity: 1; width: 30%; animation: loadPulse 1.4s ease-in-out infinite; }
+  @keyframes loadPulse {
+    0% { width: 10%; }
+    50% { width: 60%; }
+    100% { width: 90%; }
+  }
+
+  /* Responsive */
+  @media (max-width: 860px) {
+    .main { grid-template-columns: 1fr; }
+    aside.sidebar {
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: 320px;
+      z-index: 20;
+      transform: translateX(-100%);
+      transition: transform .25s ease;
+      box-shadow: var(--shadow-lg);
+    }
+    aside.sidebar.open { transform: translateX(0); }
+    .detail-inner { padding: 20px 18px 60px; }
+    .menu-toggle { display: inline-flex !important; }
+    .brand-sub { display: none; }
+  }
+  .menu-toggle { display: none; }
+</style>
+</head>
+<body>
+<div class="loading-bar" id="loadingBar"></div>
+<div class="app">
+
+  <header class="topbar">
+    <button class="icon-btn menu-toggle" id="menuToggle" aria-label="菜单">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+    <div class="brand">
+      <span class="brand-mark">BeCode</span>
+      <span class="brand-sub">会话查看器</span>
+    </div>
+    <div class="path-bar">
+      <span class="ico">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      </span>
+      <button class="path-btn" id="pickBtn" type="button" title="选择会话文件夹">
+        <span class="dir-prompt" id="dirLabel">选择文件夹…</span>
+      </button>
+      <span class="path-hint">~/.becode/sessions</span>
+    </div>
+    <div class="top-actions">
+      <button class="icon-btn" id="refreshBtn" title="刷新" aria-label="刷新">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="main">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-head">
+        <div class="sidebar-title">
+          <h2>会话列表</h2>
+          <span class="count-pill" id="countPill">0</span>
+        </div>
+        <div class="search-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="searchInput" type="text" placeholder="按 ID 或需求搜索…">
+        </div>
+      </div>
+      <div class="session-list" id="sessionList"></div>
+    </aside>
+
+    <article class="detail" id="detail">
+      <div class="empty-state">
+        <div class="glyph">B</div>
+        <h3>未选择会话</h3>
+        <p>从左侧选择一个会话，查看其 coder/reviewer 轮次、工具调用和 Markdown 报告。</p>
+      </div>
+    </article>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+// ===== State =====
+const state = {
+  dirHandle: null,
+  sessions: [],
+  filter: '',
+  selectedFile: null,
+  selectedData: null,
+};
+
+// ===== DOM =====
+const $ = (id) => document.getElementById(id);
+const elList = $('sessionList');
+const elDetail = $('detail');
+const elCount = $('countPill');
+const elPickBtn = $('pickBtn');
+const elDirLabel = $('dirLabel');
+const elSearch = $('searchInput');
+const elToast = $('toast');
+const elLoading = $('loadingBar');
+
+// ===== IndexedDB (persist directory handle across reloads) =====
+const DB_NAME = 'becode-viewer';
+const STORE = 'handles';
+const KEY = 'sessionDir';
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbPut(handle) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(handle, KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbGet() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const r = tx.objectStore(STORE).get(KEY);
+    r.onsuccess = () => resolve(r.result || null);
+    r.onerror = () => reject(r.error);
+  });
+}
+async function idbDel() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).delete(KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function verifyPermission(handle) {
+  if (!handle) return false;
+  const opts = { mode: 'read' };
+  if ((await handle.queryPermission(opts)) === 'granted') return true;
+  if ((await handle.requestPermission(opts)) === 'granted') return true;
+  return false;
+}
+
+// ===== Utils =====
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const STATUS_LABELS = {
+  running: '运行中',
+  completed: '已完成',
+  failed: '已失败',
+  unknown: '未知',
+};
+function statusLabel(s) { return STATUS_LABELS[s] || s || '未知'; }
+
+function showToast(msg, isErr=false) {
+  elToast.textContent = msg;
+  elToast.className = 'toast show' + (isErr ? ' error' : '');
+  clearTimeout(elToast._t);
+  elToast._t = setTimeout(() => elToast.className = 'toast', 2600);
+}
+
+function setLoading(on) {
+  elLoading.className = on ? 'loading-bar active' : 'loading-bar';
+}
+
+function fmtTime(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d)) return iso;
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch (e) { return iso; }
+}
+
+function fmtRel(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    const now = Date.now();
+    const diff = (now - d.getTime()) / 1000;
+    if (diff < 60) return '刚刚';
+    if (diff < 3600) return `${Math.floor(diff/60)} 分钟前`;
+    if (diff < 86400) return `${Math.floor(diff/3600)} 小时前`;
+    if (diff < 86400*7) return `${Math.floor(diff/86400)} 天前`;
+    return fmtTime(iso);
+  } catch (e) { return iso; }
+}
+
+// ===== Markdown =====
+let markedReady = typeof marked !== 'undefined';
+function renderMd(text) {
+  if (!text) return '';
+  if (markedReady) {
+    try {
+      const html = marked.parse(text, { breaks: true, gfm: true });
+      if (typeof DOMPurify !== 'undefined') {
+        return DOMPurify.sanitize(html);
+      }
+      return html;
+    } catch (e) { /* fall through */ }
+  }
+  return '<pre>' + escapeHtml(text) + '</pre>';
+}
+
+// ===== Tool icons =====
+const TOOL_ICONS = {
+  read_file:   '📄',
+  edit_file:   '✎',
+  bash_exec:   '⚡',
+  web_search:  '🔍',
+  web_fetch:   '🌐',
+  write_file:  '✎',
+  grep:        '⌕',
+  glob:        '⊛',
+};
+function toolIcon(name) {
+  return TOOL_ICONS[name] || '🔧';
+}
+
+// ===== Tool preview =====
+function toolPreview(name, args) {
+  if (!args || typeof args !== 'object') return '';
+  if (name === 'read_file' && args.path) return shortenPath(args.path);
+  if (name === 'edit_file' && args.path) return shortenPath(args.path);
+  if (name === 'bash_exec' && args.command) return truncate(args.command, 60);
+  if (name === 'web_search' && args.query) return truncate(args.query, 60);
+  if (name === 'web_fetch' && args.url) return truncate(args.url, 60);
+  if (name === 'write_file' && args.path) return shortenPath(args.path);
+  if (args.path) return shortenPath(args.path);
+  return '';
+}
+function shortenPath(p) {
+  if (!p) return '';
+  const s = String(p);
+  const parts = s.split(/[\\/]/);
+  if (parts.length <= 3) return s;
+  return '…/' + parts.slice(-2).join('/');
+}
+function truncate(s, n) {
+  s = String(s).replace(/\s+/g, ' ').trim();
+  return s.length > n ? s.slice(0, n) + '…' : s;
+}
+
+// ===== Render session list =====
+function renderList() {
+  const f = state.filter.toLowerCase();
+  const items = state.sessions.filter(s => {
+    if (!f) return true;
+    return (s.session_id || '').toLowerCase().includes(f)
+        || (s.requirement || '').toLowerCase().includes(f)
+        || (s.filename || '').toLowerCase().includes(f);
+  });
+
+  if (items.length === 0) {
+    elList.innerHTML = `<div class="sidebar-empty">${state.sessions.length === 0 ? '该目录下未找到会话。' : '无匹配结果。'}</div>`;
+    elCount.textContent = '0';
+    return;
+  }
+
+  elCount.textContent = items.length;
+  elList.innerHTML = items.map(s => {
+    const isActive = s.filename === state.selectedFile;
+    const status = s.status || 'unknown';
+    const errBadge = s.error ? '<span style="color:var(--fail)">⚠ 错误</span>' : '';
+    return `
+      <div class="session-item ${isActive ? 'active' : ''}" data-file="${escapeHtml(s.filename)}">
+        <div class="si-row1">
+          <span class="status-dot ${status}"></span>
+          <span class="si-id">${escapeHtml(s.session_id || s.filename)}</span>
+          <span class="si-meta">${s.history_count != null ? s.history_count + ' 轮' : ''}</span>
+        </div>
+        <div class="si-req">${escapeHtml(s.requirement || s.error || '(无需求)')}</div>
+        <div class="si-foot">
+          <span>${fmtRel(s.updated_at || s.created_at)}</span>
+          ${status !== 'unknown' ? `<span class="sep">·</span><span>${escapeHtml(statusLabel(status))}</span>` : ''}
+          ${errBadge}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  elList.querySelectorAll('.session-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const f = el.getAttribute('data-file');
+      selectSession(f);
+    });
+  });
+}
+
+// ===== File System Access API =====
+function fsAvailable() {
+  return typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function';
+}
+
+async function pickDirectory() {
+  if (!fsAvailable()) {
+    showToast('不支持 File System Access API，请使用 Chrome/Edge 86+。', true);
+    return null;
+  }
+  try {
+    const handle = await window.showDirectoryPicker({ id: 'becode-sessions', mode: 'read' });
+    return handle;
+  } catch (e) {
+    if (e.name === 'AbortError') return null;
+    showToast('打开文件夹失败：' + (e.message || e.name), true);
+    return null;
+  }
+}
+
+async function listSessionsFromHandle(dirHandle) {
+  const items = [];
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind !== 'file') continue;
+    if (!entry.name.toLowerCase().endsWith('.json')) continue;
+    try {
+      const file = await entry.getFile();
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const req = (data.requirement || '').toString().trim();
+      items.push({
+        filename: entry.name,
+        session_id: data.session_id || '',
+        created_at: data.created_at || '',
+        updated_at: data.updated_at || '',
+        status: data.status || 'unknown',
+        turn: data.turn || 0,
+        requirement: req.slice(0, 200),
+        history_count: Array.isArray(data.history) ? data.history.length : 0,
+        mtime: file.lastModified,
+      });
+    } catch (e) {
+      items.push({ filename: entry.name, error: e.message, mtime: 0 });
+    }
+  }
+  items.sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
+  return items;
+}
+
+async function readSessionFromHandle(dirHandle, filename) {
+  const fileHandle = await dirHandle.getFileHandle(filename);
+  const file = await fileHandle.getFile();
+  const text = await file.text();
+  return JSON.parse(text);
+}
+
+function updateDirLabel() {
+  if (state.dirHandle) {
+    elDirLabel.textContent = state.dirHandle.name;
+    elDirLabel.className = '';
+  } else {
+    elDirLabel.textContent = '选择文件夹…';
+    elDirLabel.className = 'dir-prompt';
+  }
+}
+
+// ===== Load sessions list =====
+async function loadSessions() {
+  if (!state.dirHandle) {
+    state.sessions = [];
+    renderList();
+    return;
+  }
+  setLoading(true);
+  try {
+    const items = await listSessionsFromHandle(state.dirHandle);
+    state.sessions = items;
+    if (items.length === 0) {
+      showToast('文件夹 "' + state.dirHandle.name + '" 中没有 .json 会话文件');
+    }
+    renderList();
+  } catch (e) {
+    showToast('读取文件夹失败：' + (e.message || e.name), true);
+    state.sessions = [];
+    renderList();
+  } finally {
+    setLoading(false);
+  }
+}
+
+// ===== Pick folder, persist, load =====
+async function chooseFolder() {
+  const handle = await pickDirectory();
+  if (!handle) return;
+  state.dirHandle = handle;
+  state.selectedFile = null;
+  state.selectedData = null;
+  updateDirLabel();
+  try { await idbPut(handle); } catch (e) { /* ignore persistence errors */ }
+  await loadSessions();
+  renderEmptyDetail();
+}
+
+// ===== Select & render one session =====
+async function selectSession(filename) {
+  if (!filename || !state.dirHandle) return;
+  state.selectedFile = filename;
+  renderList();
+  setLoading(true);
+  try {
+    const data = await readSessionFromHandle(state.dirHandle, filename);
+    state.selectedData = data;
+    renderDetail(data);
+  } catch (e) {
+    renderError(e.message || e.name);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function renderEmptyDetail() {
+  elDetail.innerHTML = `
+    <div class="empty-state">
+      <div class="glyph">B</div>
+      <h3>${state.dirHandle ? '未选择会话' : '未打开文件夹'}</h3>
+      <p>${state.dirHandle
+        ? '从左侧选择一个会话，查看其 coder/reviewer 轮次、工具调用和 Markdown 报告。'
+        : '点击上方的<strong>选择文件夹…</strong>，选择你的 <code>~/.becode/sessions</code> 目录（或任意包含会话 JSON 文件的文件夹）。'}</p>
+    </div>
+  `;
+}
+
+function renderError(msg) {
+  elDetail.innerHTML = `
+    <div class="empty-state">
+      <div class="glyph">!</div>
+      <h3>加载失败</h3>
+      <p>${escapeHtml(msg)}</p>
+    </div>
+  `;
+}
+
+// ===== Render detail =====
+function renderDetail(s) {
+  const status = s.status || 'unknown';
+  const history = Array.isArray(s.history) ? s.history : [];
+  const turns = history.length;
+  let toolCount = 0;
+  history.forEach(h => {
+    toolCount += (h.metadata && Array.isArray(h.metadata.tool_calls)) ? h.metadata.tool_calls.length : 0;
+  });
+
+  elDetail.innerHTML = `
+    <div class="detail-inner">
+      <div class="session-header">
+        <div class="sh-top">
+          <span class="sh-id">${escapeHtml(s.session_id || '')}</span>
+          <span class="sh-status ${status}">
+            <span class="status-dot ${status}"></span>${escapeHtml(statusLabel(status))}
+          </span>
+        </div>
+        <h1 class="sh-title"><span class="label">需求</span></h1>
+        <div class="sh-req">${escapeHtml(s.requirement || '(空)')}</div>
+        <div class="sh-stats">
+          <span class="stat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            创建于 <b>${escapeHtml(fmtTime(s.created_at))}</b>
+          </span>
+          <span class="stat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/></svg>
+            更新于 <b>${escapeHtml(fmtTime(s.updated_at))}</b>
+          </span>
+          <span class="stat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            <b>${turns}</b> 轮
+          </span>
+          <span class="stat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            <b>${toolCount}</b> 次工具调用
+          </span>
+        </div>
+      </div>
+
+      <div class="timeline">
+        ${history.map((h, i) => renderTurn(h, i)).join('')}
+      </div>
+    </div>
+  `;
+
+  // wire up tool-call toggles
+  elDetail.querySelectorAll('.tc-head').forEach(head => {
+    head.addEventListener('click', () => {
+      head.parentElement.classList.toggle('expanded');
+    });
+  });
+  // wire up toggle-all
+  elDetail.querySelectorAll('.toggle-all').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const block = btn.closest('.tools-block');
+      const calls = block.querySelectorAll('.tool-call');
+      const anyExpanded = Array.from(calls).some(c => c.classList.contains('expanded'));
+      calls.forEach(c => c.classList.toggle('expanded', !anyExpanded));
+      btn.textContent = anyExpanded ? '全部展开' : '全部折叠';
+    });
+  });
+}
+
+function renderTurn(h, idx) {
+  const role = h.role || 'unknown';
+  const content = h.content || '';
+  const tcs = (h.metadata && Array.isArray(h.metadata.tool_calls)) ? h.metadata.tool_calls : [];
+  const num = String(idx + 1).padStart(2, '0');
+
+  const coderIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>';
+  const reviewerIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>';
+
+  return `
+    <div class="turn ${role}" style="animation-delay:${Math.min(idx*60, 400)}ms">
+      <div class="turn-head">
+        <span class="turn-num">${num}</span>
+        <span class="role-badge ${role}">
+          ${role === 'coder' ? coderIcon : role === 'reviewer' ? reviewerIcon : ''}
+          ${escapeHtml(role)}
+        </span>
+        <span class="turn-time">${escapeHtml(fmtTime(h.timestamp))}</span>
+      </div>
+      <div class="turn-body">
+        ${content ? `<div class="md">${renderMd(content)}</div>` : '<div class="md"><em>(无内容)</em></div>'}
+        ${tcs.length > 0 ? renderTools(tcs) : ''}
+      </div>
+    </div>
+  `;
+}
+
+function renderTools(tcs) {
+  return `
+    <div class="tools-block">
+      <div class="tools-head">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        工具调用
+        <span class="count">${tcs.length}</span>
+        <button class="toggle-all" type="button">全部展开</button>
+      </div>
+      <div class="tools-grid">
+        ${tcs.map((tc, i) => renderToolCall(tc, i)).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderToolCall(tc, idx) {
+  const name = tc.tool || 'unknown';
+  const args = tc.args || {};
+  const preview = toolPreview(name, args);
+  const num = String(idx + 1).padStart(2, '0');
+
+  const argRows = Object.entries(args).map(([k, v]) => {
+    let valStr;
+    let isLong = false;
+    if (v === null || v === undefined) {
+      valStr = String(v);
+    } else if (typeof v === 'object') {
+      valStr = JSON.stringify(v, null, 2);
+      isLong = true;
+    } else {
+      valStr = String(v);
+      if (valStr.length > 120 || valStr.indexOf('\n') !== -1) isLong = true;
+    }
+    return `
+      <div class="tc-arg">
+        <span class="tc-arg-key">${escapeHtml(k)}</span>
+        <span class="tc-arg-val ${isLong ? 'long' : ''}">${escapeHtml(valStr)}</span>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="tool-call">
+      <div class="tc-head" role="button" tabindex="0">
+        <svg class="tc-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+        <span class="tc-icon">${toolIcon(name)}</span>
+        <span class="tc-name">${escapeHtml(name)}</span>
+        ${preview ? `<span class="tc-preview">${escapeHtml(preview)}</span>` : ''}
+        <span class="tc-idx">#${num}</span>
+      </div>
+      <div class="tc-body">
+        ${argRows || '<div class="tc-arg"><span class="tc-arg-val">(无参数)</span></div>'}
+      </div>
+    </div>
+  `;
+}
+
+// ===== Init =====
+async function init() {
+  if (!fsAvailable()) {
+    elDirLabel.textContent = '浏览器不支持';
+    elDetail.innerHTML = `
+      <div class="empty-state">
+        <div class="glyph">!</div>
+        <h3>浏览器不受支持</h3>
+        <p>本查看器使用 <strong>File System Access API</strong>，需要 Chrome 或 Edge 86 及以上版本。请使用上述浏览器打开 <code>web/index.html</code>。</p>
+      </div>
+    `;
+    elPickBtn.disabled = true;
+    elPickBtn.style.opacity = '0.5';
+    elPickBtn.style.cursor = 'not-allowed';
+    return;
+  }
+
+  // Try to restore the previously-picked directory handle from IndexedDB.
+  try {
+    const saved = await idbGet();
+    if (saved) {
+      const ok = await verifyPermission(saved);
+      if (ok) {
+        state.dirHandle = saved;
+        updateDirLabel();
+        await loadSessions();
+        renderEmptyDetail();
+        return;
+      }
+    }
+  } catch (e) { /* fall through to empty state */ }
+
+  updateDirLabel();
+  renderEmptyDetail();
+}
+
+elPickBtn.addEventListener('click', chooseFolder);
+$('refreshBtn').addEventListener('click', () => {
+  if (state.dirHandle) loadSessions();
+  else chooseFolder();
+});
+elSearch.addEventListener('input', () => {
+  state.filter = elSearch.value;
+  renderList();
+});
+$('menuToggle').addEventListener('click', () => {
+  $('sidebar').classList.toggle('open');
+});
+
+// keyboard: Esc closes mobile sidebar
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') $('sidebar').classList.remove('open');
+});
+
+init();
+</script>
+</body>
+</html>
