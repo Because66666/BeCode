@@ -40,4 +40,6 @@
 - **可编辑预填输入**: `console.py` 的 `interactive_prompt()` 支持平台特定的可编辑预填：Windows 上使用 `kernel32.WriteConsoleInputW` 注入按键事件，Unix/macOS 上使用 `readline.set_startup_hook` + `insert_text`。预填文本在输入框中出现且用户可直接编辑（光标在末尾）。
 - **Hello World 实现**: `hello_world.py` 是独立的 Hello World 脚本，运行 `python hello_world.py` 输出 `hello world test`。`main.py` 的 `--hello` 参数（`python main.py --hello`）输出 `hello world test` 后立即退出，不影响其他参数功能。
 - **`-e` / `--execute` 参数**: `main.py` 新增 `-e`/`--execute` 命令行参数，运行 `python main.py -e ".exit"` 执行 `.exit` 命令后退出程序。目前仅支持 `.exit` 命令（退出程序），未知命令会以 exit code 1 报错。该参数在 `--hello` 之后、数据目录初始化之前处理，与 `--hello` 等参数不冲突。
+- **`build_installer.bat`**: 根目录下一键打包脚本。自动读取 `installer/becode_setup.iss` 中的版本号（`#define MyAppVersion`），按 0~9 进位规则递增（如 1.1.9→1.2.0, 1.9.9→2.0.0, 9.9.9→0.0.0），然后依次执行 PyInstaller（`becode.spec`）和 Inno Setup ISCC 编译器，最终输出到 `dist/` 目录并提供 `install.exe` 别名。前置依赖检测：自动搜索 ISCC.exe 的常见安装路径（Inno Setup 5/6, x86/x64）及 PATH 环境变量。
+- **`.gitignore` 完善**: 按功能分组（Python 缓存、运行时数据、AI 中间产物、环境变量、构建产物、安装程序、OS 文件），每项带中文注释。新增忽略项：`*.pyc/*.pyo/*.pyd/*.log/*.tmp/*.swp/*.bak`（编译/临时文件）、`.trae/`（Trae IDE 项目配置）、`.DS_Store/Thumbs.db`（OS 元文件）。
 

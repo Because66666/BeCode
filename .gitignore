@@ -1,15 +1,50 @@
-sessions/  
-test_py_output.txt  
-__pycache__/ 
-.claude/
-.hybrid/
-.env
+# ============================================
+# Python 缓存和临时文件
+# ============================================
+__pycache__/          # Python 字节码缓存
+*.pyc                # Python 编译文件
+*.pyo                # Python 优化编译文件
+*.pyd               # Python 动态库 (Windows)
+*.log                # 日志文件
+*.tmp                # 临时文件
+*.swp                # Vim 临时交换文件
+*.bak                # 备份文件
 
-# Build artifacts
-build/
-dist/
-*.spec
-becode_venv/
-inno_setup.exe
-installer/inno_setup.exe
-installer/BeCode_Setup*.exe
+# ============================================
+# 运行时数据 / 会话记录（含用户敏感信息）
+# ============================================
+sessions/             # 用户会话记录，含对话内容及工具调用日志
+test_py_output.txt    # 测试输出文件
+
+# ============================================
+# AI 智能体工作流中间产物（不对外公开）
+# ============================================
+.claude/              # Claude AI 工作区元数据
+.hybrid/              # 混合智能体工作流中间状态
+.trae/                # Trae IDE 项目配置和计划文档
+
+# ============================================
+# 环境变量与私密配置
+# ============================================
+.env                  # API Key、模型配置等敏感环境变量
+
+# ============================================
+# 构建产物（PyInstaller + Inno Setup）
+# ============================================
+build/                # PyInstaller 构建中间目录
+dist/                 # 打包输出目录（.exe / installer）
+*.spec                # PyInstaller spec 文件（自动生成，不必提交）
+becode_venv/           # 项目虚拟环境目录
+
+# ============================================
+# 安装程序依赖及输出
+# ============================================
+inno_setup.exe                 # Inno Setup 编译器本体（若下载到根目录）
+installer/inno_setup.exe       # Inno Setup 编译器本体（若下载到 installer 目录）
+installer/BeCode_Setup*.exe    # 生成的安装程序安装包
+
+# ============================================
+# 操作系统特定文件
+# ============================================
+.DS_Store             # macOS 资源文件
+Thumbs.db             # Windows 缩略图缓存
