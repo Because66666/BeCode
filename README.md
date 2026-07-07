@@ -1,4 +1,4 @@
-# 🧠 BeCode — 双智能体编码工作流
+# BeCode — 双智能体编码工作流
 
 > 基于 LangChain 1.3+  架构的双智能体协作编码系统，实现 **Coder Agent（编码）→ Reviewer Agent（审查）→ 反馈循环** 的自反馈系统。致力于通过提示词工程，让普通模型的编码能力和工程完成度获得提升。
 
@@ -58,6 +58,10 @@
 │       ├── console.py           # 终端 UI（AgentConsole — Rich 渲染）
 │       ├── callbacks.py         # LangChain 回调处理器（实时展示工具调用）
 │       └── collapsible.py       # 输出分段管理器
+│
+├── web/                         # 会话查看网页（纯前端，本地打开即用）
+│   ├── index.html               # 单页应用入口
+│   └── assets/                  # 本地化字体 + JS 库（不依赖 CDN）
 │
 └── .trae/plans/                 # 开发计划文档
 ```
@@ -174,6 +178,30 @@ python main.py --interactive
 - 每次运行自动生成唯一会话 ID（8 位 UUID）
 - 每轮对话的智能体输出自动保存到 `sessions/session_{id}.json`
 - 会话文件包含：原始需求、每轮 Coder 报告、Reviewer 判定、时间戳
+
+---
+
+## 🌐 会话查看网页
+
+项目内置一个纯前端会话查看网页，用于浏览和回顾历史对话记录，无需启动后端服务。
+
+### 特性
+
+- **纯前端实现** — 基于 File System Access API 选择会话文件夹，默认路径提示 `%username%/.becode`
+- **本地持久化** — 通过 IndexedDB 保存目录句柄，刷新页面后无需重选文件夹
+- **Markdown 渲染** — 智能体报告支持完整 Markdown 渲染（marked.js + DOMPurify）
+- **工具调用折叠** — 默认折叠显示工具图标 + 名称 + 参数预览，可批量展开/折叠
+- **资产本地化** — 字体（Google Fonts woff2）和 JS 库均已下载到本地，不依赖 CDN
+- **中文化界面** — UI 说明文字均为中文，专有名词（BeCode、coder/reviewer 等）保留英文
+
+### 使用方式
+
+1. 使用 **Chrome 或 Edge 86+** 打开 `web/index.html`（直接双击文件即可）
+2. 点击顶部路径栏，选择会话文件夹（默认推荐 `%username%/.becode/sessions`）
+3. 左侧侧栏显示会话列表，支持按 ID 或需求关键词搜索
+4. 点击会话项，右侧详情区展示完整对话时间线、Markdown 报告和工具调用
+
+> 设计风格：白色主题 + 浅蓝副色，编辑型技术日志风格（Fraunces 衬线展示字 + DM Sans 正文 + JetBrains Mono 代码）。
 
 ---
 
