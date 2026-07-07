@@ -35,4 +35,5 @@
 - **`edit_file` 自动创建文件优化**: `src/tools/tools.py` 的 `edit_file` 工具在文件不存在时，不再直接报错，而是检查父目录是否存在；如果父目录存在，则自动创建空文件后再执行替换逻辑（`old_string=""` 时匹配空文件内容，替换后写入 `new_string`）；如果父目录也不存在，则返回"文件路径不存在"错误。
 - **Session 记录工具调用**: `ToolCallCapture`（`callbacks.py`）新增 `_tool_calls` 累加器和 `get_tool_calls()` 方法，在 `on_tool_start` 中记录工具名和参数（不含响应）。`Orchestrator.run()` 在每次 Coder/Reviewer 运行后，将工具调用列表通过 `metadata={"tool_calls": [...]}` 传入 `session.add_entry()`，最终持久化到 session JSON 的 `history[].metadata.tool_calls` 字段。
 - **Inno Setup 安装程序语言配置**: `installer/becode_setup.iss` 的 `[Languages]` 节配置了三语言：`chinesesimp`（默认，排在首位）、`chinesetrad`（繁体中文）、`english`（英文）。Inno Setup 会使用第一个语言作为安装向导的默认显示语言。
+- **`--hello` 参数**: `main.py` 新增 `--hello` 命令行参数，运行 `python main.py --hello` 输出 "hello world test"，实现后立即退出，不影响其他参数功能。
 
