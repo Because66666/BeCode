@@ -52,6 +52,9 @@ test_new_repo/
 .gitignore.new
 .gitignore_test
 test_file.txt
+ignore_me_test/
+zzz_test_ignore/
+test_version.bat
 
 # ============================================
 # 打包产物内部残留（被 PyInstaller 打包进去的敏感文件）
