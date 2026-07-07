@@ -34,7 +34,6 @@ logging.basicConfig(
 
 # ── Global Ctrl+C state ────────────────────────────────────────────
 _ctrl_c_pressed = False
-_has_formal_output = False
 
 
 def _signal_handler(signum, frame):
@@ -81,9 +80,7 @@ def interactive_mode(orchestrator: Orchestrator, model_name: Optional[str] = Non
     )
 
     while True:
-        global _has_formal_output
         _ctrl_c_pressed = False
-        _has_formal_output = False
 
         # ── Step 1: Get user input ──────────────────────────────────
         try:
@@ -114,20 +111,38 @@ def interactive_mode(orchestrator: Orchestrator, model_name: Optional[str] = Non
         console.print("[bold]━━━ 开始执行任务 ━━━[/]")
         console.print()
 
+        result: Optional[dict] = None
         try:
             result = orchestrator.run_interactive(
                 requirement=user_input,
                 summary_context=summary_context,
             )
-            _has_formal_output = bool(
-                result.get("coder_reports") and result["coder_reports"][-1]
-            )
-
         except KeyboardInterrupt:
-            # Ctrl+C during agent execution
-            console.show_interrupt_message(has_output=_has_formal_output)
+            # Ctrl+C during agent execution — orchestrator.run_interactive already
+            # caught it and returned via result dict, but if it propagated here
+            # (before entering run_interactive), handle it.
+            console.show_interrupt_message(has_output=False)
+            should_prefill = True
+            console.print("[dim italic]无输出结果，返回输入状态。[/]")
+            continue
 
-            if _has_formal_output and result:
+        except Exception as exc:
+            console.error(f"执行异常: {exc}")
+            should_prefill = True
+            continue
+
+        # Result is now guaranteed to be a dict (orchestrator.run_interactive
+        # always returns a dict, even on KeyboardInterrupt)
+        assert result is not None
+
+        # Check interrupt state from orchestrator result
+        interrupted = result.get("interrupted", False)
+        has_formal_output = result.get("has_formal_output", False)
+
+        if interrupted:
+            console.show_interrupt_message(has_output=has_formal_output)
+
+            if has_formal_output:
                 # Partial output exists — treat as context
                 summary_context.append(
                     f"（被中断）任务: {user_input[:50]}..."
@@ -141,12 +156,7 @@ def interactive_mode(orchestrator: Orchestrator, model_name: Optional[str] = Non
                 console.print(
                     "[dim italic]无输出结果，返回输入状态。[/]"
                 )
-            continue
-
-        except Exception as exc:
-            console.error(f"执行异常: {exc}")
-            should_prefill = True
-            continue
+            continue  # Don't display stats/summary for interrupted runs
 
         previous_result = result
 
@@ -228,6 +238,7 @@ def main():
         description=f"{APP_NAME} — 双智能体编码工作流系统 v{APP_VERSION}",
     )
     parser.add_argument("--version", "-v", action="store_true", help="显示版本信息")
+    parser.add_argument("--hello", action="store_true", help="输出 hello world 并退出")
     src_grp = parser.add_mutually_exclusive_group()
     src_grp.add_argument("requirement", nargs="?", help="需求文本 (直接传入)")
     src_grp.add_argument("--file", "-f", type=str, help="从文件读取需求")
@@ -242,6 +253,11 @@ def main():
     if args.version:
         print(f"{APP_NAME} v{APP_VERSION}")
         print(f"数据目录: {BECODE_HOME}")
+        sys.exit(0)
+
+    # ── Hello ────────────────────────────────────────────────────────
+    if args.hello:
+        print("hello world")
         sys.exit(0)
 
     # ── Ensure data directory exists ────────────────────────────────
