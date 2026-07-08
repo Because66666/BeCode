@@ -11,6 +11,10 @@ Uses ``create_agent`` from ``langchain.agents`` (LangGraph-based).
 ║  Learned Workspace Facts                        ║
 ║  - 工具列表已包含 web_search 和 web_fetch，      ║
 ║    系统提示词也已同步更新。                      ║
+║  - 每轮调用 run_coder() 均创建全新的 Agent       ║
+║    实例，只传递本轮所需的 requirement + feedback，║
+║    绝不携带前一轮的思考内容或工具调用记录。       ║
+║    上下文仅包含：需求 / 审查反馈 / 工作区文件。   ║
 ╚══════════════════════════════════════════════════╝
 """
 
@@ -72,6 +76,18 @@ def build_coder_agent(model_name: Optional[str] = None):
 def run_coder(requirement: str, feedback: str = "", model_name: Optional[str] = None,
               callbacks: Optional[Callbacks] = None) -> str:
     """Run the Coder Agent and return its final report.
+
+    IMPORTANT DESIGN CONSTRAINT:
+    Each invocation creates a BRAND-NEW agent instance and builds a single
+    ``HumanMessage`` containing ONLY:
+      - The original user requirement
+      - The reviewer's actionable feedback (if any) — extracted from the
+        ``下一轮反馈`` section of the reviewer's verdict, NOT the full review
+      - Workspace context files (CLAUDE.md / AGENTS.md)
+
+    **No** previous round's chain-of-thought, tool-call traces, or intermediate
+    AI/Tool messages are passed.  This ensures the Coder starts each round with
+    a clean context.
 
     Args:
         requirement: The user's original request.

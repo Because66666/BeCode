@@ -13,6 +13,9 @@ that agent round.
 ║  - 通过 metadata={"tool_calls": [...]} 传入      ║
 ║    session.add_entry()，持久化到 session JSON    ║
 ║    的 history[].metadata.tool_calls 字段。       ║
+║  - ⚠️ 这些 history/tool_calls 仅供审计/调试      ║
+║    使用，**绝不**应喂回 Coder Agent 的 prompt。  ║
+║    每轮 Coder 必须从干净的上下文开始。            ║
 ╚══════════════════════════════════════════════════╝
 """
 
@@ -96,25 +99,12 @@ class SessionStore:
             "history": [],
         }
 
-    def get_coder_context(self) -> str:
-        """Build the prompt context for the Coder agent, preserving history."""
-        lines = [f"# 用户原始需求\n{self.requirement}\n"]
-        for entry in self.history:
-            role_label = {"user": "用户反馈", "coder": "主智能体报告", "reviewer": "审查意见"}.get(
-                entry["role"], entry["role"]
-            )
-            lines.append(f"## {role_label} (第 {entry['turn']} 轮)\n{entry['content']}\n")
-        return "\n".join(lines)
-
-    def get_reviewer_context(self) -> str:
-        """Build the prompt context for the Reviewer agent — only sees
-        the original requirement + the latest coder report."""
-        lines = [f"# 用户原始需求\n{self.requirement}\n"]
-        for entry in reversed(self.history):
-            if entry["role"] == "coder":
-                lines.append(f"## 主智能体最新报告\n{entry['content']}\n")
-                break
-        return "\n".join(lines)
+    # NOTE: 不再提供 get_coder_context() / get_reviewer_context() 方法。
+    #
+    # 根据设计约束，Coder Agent 在后续轮次中不应看到前一轮的思考内容
+    # 和工具调用记录。Orchestrator 只将 reviewer 的「下一轮反馈」
+    # （纯行动项）传递给 Coder，而非完整历史。
+    # Reviewer 也仅收到原始需求 + Coder 最新报告，不走 session history。
 
     def __repr__(self) -> str:
         return f"SessionStore(id={self.session_id}, turn={self.turn}, status={self.status})"

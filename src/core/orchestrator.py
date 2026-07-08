@@ -15,6 +15,11 @@ Flow:
 ║    调用列表通过 metadata={"tool_calls": [...]}   ║
 ║    传入 session.add_entry()，持久化到 session    ║
 ║    JSON 的 history[].metadata.tool_calls 字段。  ║
+║  - 这些 tool_calls 仅用于审计/调试，绝不喂回     ║
+║    Coder Agent。每轮 Coder 的 context 只包含:    ║
+║      (a) 原始需求                                ║
+║      (b) reviewer 的「下一轮反馈」(纯行动项)     ║
+║      (c) 工作区上下文文件                         ║
 ╚══════════════════════════════════════════════════╝
 """
 
@@ -143,6 +148,17 @@ class Orchestrator:
     def run(self, requirement: str) -> dict:
         """Execute the full agent workflow.
 
+        CONTEXT CLEANLINESS GUARANTEE:
+        Each iteration invokes ``run_coder()`` with ONLY:
+          1. The original ``requirement`` (unchanged across rounds)
+          2. The reviewer's actionable feedback (``下一轮反馈`` section only)
+          3. Workspace context files (CLAUDE.md / AGENTS.md)
+
+        The Coder agent is re-built from scratch each round — it receives a
+        single ``HumanMessage`` with no accumulated AI / Tool messages from
+        previous rounds.  This ensures the Coder never sees its own previous
+        chain-of-thought or tool-call traces.
+
         Args:
             requirement: The user's request.
 
@@ -175,6 +191,10 @@ class Orchestrator:
             console.start_iteration(iteration, self.max_iterations)
 
             # ── Step A: Coder ────────────────────────────────────────
+            # NOTE: run_coder() builds a BRAND-NEW agent each round and
+            # passes only `requirement` + `feedback` (the reviewer's clean
+            # actionable items).  No previous round's thoughts or tool calls
+            # are included.  See `coder_agent.py` for details.
             console.agent_thinking("coder", "正在分析需求并实现...")
             coder_callback = ToolCallCapture(agent_name="coder")
 
@@ -249,8 +269,15 @@ class Orchestrator:
                 )
 
             # ── Step D: Extract feedback ─────────────────────────────
+            # Extract ONLY the actionable "下一轮反馈" section — NOT the
+            # full verdict.  This ensures the Coder's next round context
+            # contains zero references to its own previous thoughts / tool
+            # calls.
             feedback = self._extract_feedback(review_verdict)
-            logger.info("Reviewer FAIL — extracting feedback for next round")
+            logger.info(
+                "Reviewer FAIL — extracted %d chars of actionable feedback",
+                len(feedback),
+            )
             console.review_verdict(is_pass=False, feedback=feedback)
 
         # ── Out of iterations ────────────────────────────────────────
@@ -287,21 +314,39 @@ class Orchestrator:
 
     @staticmethod
     def _extract_feedback(verdict: str) -> str:
-        """Extract the actionable feedback section from a FAIL verdict."""
-        # Look for "下一轮反馈" or "详细意见" section
-        for section in ["下一轮反馈", "详细意见", "### 下一轮反馈", "### 详细意见"]:
+        """Extract ONLY the actionable feedback section from a FAIL verdict.
+
+        Returns the ``下一轮反馈`` section content — pure action items for the
+        Coder.  If that section is not found, falls back to ``详细意见``.
+        NEVER returns the full verdict or the reviewer's analysis of what the
+        Coder did (which would leak previous-round thoughts / tool calls).
+        """
+        # Look ONLY for "下一轮反馈" — this is the clean, actionable section
+        for section in ["### 下一轮反馈", "下一轮反馈"]:
             idx = verdict.find(section)
             if idx != -1:
-                # Return everything after the section header
-                content = verdict[idx + len(section):].strip()
-                # Limit to reasonable length
-                return content[:2000]
+                after = verdict[idx + len(section):].strip()
+                # Cut at the next heading (if any) to avoid bleeding into
+                # unrelated sections
+                next_heading = after.find("\n##")
+                if next_heading != -1:
+                    after = after[:next_heading].strip()
+                return after[:2000]
 
-        # Fallback: return the entire verdict (trimmed)
-        lines = verdict.strip().splitlines()
-        # Remove the verdict header
-        filtered = [l for l in lines if "PASS" not in l and "FAIL" not in l]
-        return "\n".join(filtered).strip()[:2000]
+        # Fallback 1: "详细意见" — still reasonably clean (what's wrong, not
+        # how the coder got there)
+        for section in ["### 详细意见", "详细意见"]:
+            idx = verdict.find(section)
+            if idx != -1:
+                after = verdict[idx + len(section):].strip()
+                next_heading = after.find("\n##")
+                if next_heading != -1:
+                    after = after[:next_heading].strip()
+                return after[:2000]
+
+        # Last resort: empty — better to give the Coder nothing than to leak
+        # previous internal reasoning.
+        return ""
 
     def _result(
         self,
