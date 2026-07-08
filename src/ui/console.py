@@ -438,6 +438,16 @@ class AgentConsole:
             )
         )
 
+    # ── Model Thinking (light color, not persisted) ───────────────────
+
+    def show_thinking(self, text: str):
+        """Display the model's chain-of-thought reasoning in a light/dim style.
+
+        This content is shown to the user for transparency but is NOT
+        recorded in the session history (see ``callbacks.ToolCallCapture.on_llm_end``).
+        """
+        self._console.print(Text.from_markup(f"  [italic bright_black]💭 {text}[/]"))
+
     # ── Agent Reports ─────────────────────────────────────────────────
 
     def agent_report(self, agent_name: str, report: str):

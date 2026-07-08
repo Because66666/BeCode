@@ -12,6 +12,11 @@ in real-time through the AgentConsole UI.
 ║  - ToolCallCapture 新增 _tool_calls 累加器和     ║
 ║    get_tool_calls() 方法，在 on_tool_start 中    ║
 ║    记录工具名和参数（不含响应）。                 ║
+║  - on_llm_end 新增: 捕获 LLM 的 chain-of-thought ║
+║    推理文本，通过 console.show_thinking() 以浅色   ║
+║    字体 (italic bright_black) 展示给用户。         ║
+║    此思考内容不会添加到 _tool_calls，因此不会       ║
+║    持久化到 session JSON 中。                      ║
 ╚══════════════════════════════════════════════════╝
 """
 
@@ -173,6 +178,60 @@ class ToolCallCapture(BaseCallbackHandler):
         # underlying LLM call) by checking if there's no parent run.
         if parent_run_id is None:
             self._console.agent_thinking(self.agent_name)
+        return None
+
+    def on_llm_end(
+        self,
+        response: Any,
+        *,
+        run_id: UUID,
+        parent_run_id: Optional[UUID] = None,
+        tags: Optional[list[str]] = None,
+        **kwargs: Any,
+    ) -> Any:
+        """Called when LLM finishes generating.
+
+        Extracts the model's chain-of-thought / reasoning text from the
+        response and displays it in a light/dim color via the console.
+
+        IMPORTANT: This thinking content is displayed for user transparency
+        but is deliberately NOT added to ``self._tool_calls``, so it will
+        NOT be persisted to the session history.  Only explicit tool calls
+        (captured in ``on_tool_start``) are recorded in the session.
+        """
+        try:
+            # Extract text content from the LLM response.
+            # In LangChain 0.3+, ``LLMResult.generations`` is a list of lists
+            # of ``ChatGeneration`` objects (for chat models). Each generation
+            # has a ``.message`` attribute (``AIMessage``) with ``.content``.
+            # Plain text models use ``.text`` instead.
+            thought_parts: list[str] = []
+            generations = getattr(response, "generations", [])
+            for gen_list in generations:
+                for gen in gen_list:
+                    # ChatGeneration → has .message (AIMessage)
+                    msg = getattr(gen, "message", None)
+                    if msg is not None:
+                        content = getattr(msg, "content", None) or ""
+                        if content.strip():
+                            thought_parts.append(content.strip())
+                    else:
+                        # Plain Generation → has .text
+                        text = getattr(gen, "text", None) or ""
+                        if text.strip():
+                            thought_parts.append(text.strip())
+
+            if thought_parts:
+                combined = "\n".join(thought_parts).strip()
+                if combined:
+                    self._console.show_thinking(combined)
+
+        except Exception:
+            # Silently ignore — thinking display is non-critical
+            pass
+
+        # NOTE: We do NOT add anything to self._tool_calls here.
+        # Only on_tool_start records tool invocations for session persistence.
         return None
 
     def on_chain_start(

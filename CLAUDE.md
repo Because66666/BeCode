@@ -25,4 +25,5 @@
 - 关键依赖: `langchain>=0.3`, `langchain-openai`, `langgraph`, `python-dotenv`, `pydantic-settings`, `requests`, `beautifulsoup4`, `rich`, `keyboard`。
 - 具体的文件级工程记忆已移入对应源文件的头部注释中，搜索 `╔══════════════════════════════════════════════════╗` 即可查阅。
 - **每轮 Coder 上下文必须干净**：`session_store` 不提供 `get_coder_context()`/`get_reviewer_context()`。Orchestrator 只将 reviewer 的「下一轮反馈」传给 Coder；Coder 每次新建 agent 实例，只接单条 HumanMessage，不含前一轮的思考/工具调用。
+- **模型的思考内容（chain-of-thought）用浅色字体展示，不记录到 session**：`ToolCallCapture.on_llm_end` 提取 LLM 响应的推理文本，通过 `console.show_thinking()` 以 `italic bright_black`（浅灰色斜体）展示。该内容故意不加入 `_tool_calls`，因此不会进入 `session.add_entry()` 的 metadata 中。
 
