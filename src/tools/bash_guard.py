@@ -12,6 +12,13 @@ If EITHER layer rejects, the command is blocked.
 ║  Learned Workspace Facts                        ║
 ║  - BASH_GUARD_LLM_DISABLED=1 环境变量可跳过     ║
 ║    LLM 审查层（用于测试或无 API Key 环境）。     ║
+║  - LLM 审查调用通过 clean_prompt_call →          ║
+║    clean_call(suppress_callbacks=True) 完成，     ║
+║    阻止父级 agent 的 ToolCallCapture 向此         ║
+║    基础设施调用传播，因此安全模型的输出不会       ║
+║    被误渲染为 agent 的"思考过程"(show_thinking)。 ║
+║  - bash_exec 会在工具输出首行显式包含             ║
+║    "🔒 安全审查: {reason}"，让用户看到审查结果。   ║
 ╚══════════════════════════════════════════════════╝
 """
 

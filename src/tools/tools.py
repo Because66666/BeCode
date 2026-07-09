@@ -12,6 +12,10 @@ Three tools:
 ║    创建空文件后再执行替换逻辑（old_string=""     ║
 ║    时匹配空文件内容）；如果父目录也不存在，      ║
 ║    则返回"文件路径不存在"错误。                  ║
+║  - bash_exec 工具输出首行现在包含安全审查结果:   ║
+║    "🔒 安全审查: {reason}"，取代此前安全模型      ║
+║    输出被误渲染为 agent 思考过程(show_thinking)   ║
+║    的问题。                                      ║
 ╚══════════════════════════════════════════════════╝
 """
 
@@ -204,10 +208,13 @@ def bash_exec(command: str, timeout_seconds: int = 60) -> str:
 
     guard_result = check_command(command, user_requirement="")
 
+    # Build guard info line (shown first in tool output)
+    guard_info = f"🔒 安全审查: {guard_result.reason}"
+
     if not guard_result.approved:
         return (
             f"⛔ 命令被安全系统拦截\n"
-            f"原因: {guard_result.reason}\n"
+            f"{guard_info}\n"
             f"命令: {command[:200]}"
         )
 
@@ -227,8 +234,8 @@ def bash_exec(command: str, timeout_seconds: int = 60) -> str:
     except Exception as e:
         return f"执行失败: {e}"
 
-    # 3. Build output
-    output_parts = []
+    # 3. Build output (prepend guard info)
+    output_parts = [guard_info]
     if result.stdout:
         output_parts.append(f"--- stdout ---\n{result.stdout.rstrip()}")
     if result.stderr:

@@ -35,15 +35,31 @@ def clean_call(
     messages: list[BaseMessage],
     *,
     system_prompt: Optional[str] = None,
+    suppress_callbacks: bool = True,
 ) -> str:
     """Send messages and return the content string.
 
     Optionally prepends a system message.
+
+    Args:
+        model: The chat model to invoke.
+        messages: The messages to send.
+        system_prompt: Optional system prompt to prepend.
+        suppress_callbacks: If True, pass ``callbacks=[]`` to
+            ``model.invoke()`` so that any inherited LangChain
+            callbacks (e.g. from a parent agent run) are NOT
+            propagated to this LLM call.  This is important for
+            internal/infrastructure calls (e.g. bash guard safety
+            review) whose output should NOT appear as agent
+            "chain-of-thought" in the UI.
     """
     msgs = list(messages)
     if system_prompt:
         msgs = [SystemMessage(content=system_prompt)] + msgs
-    result = model.invoke(msgs)
+    config = {}
+    if suppress_callbacks:
+        config["callbacks"] = []
+    result = model.invoke(msgs, config=config)
     return result.content if hasattr(result, "content") else str(result)
 
 

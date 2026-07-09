@@ -17,6 +17,11 @@ in real-time through the AgentConsole UI.
 ║    字体 (italic bright_black) 展示给用户。         ║
 ║    此思考内容不会添加到 _tool_calls，因此不会       ║
 ║    持久化到 session JSON 中。                      ║
+║  - 注: BashGuard 安全审查的 LLM 调用通过           ║
+║    clean_call(suppress_callbacks=True) 完成，      ║
+║    因此其输出不会触发本 callback 的 on_llm_end     ║
+║    从而不会误渲染为 agent 思考过程。安全审查        ║
+║    结果由 bash_exec 工具直接包含在工具输出中。      ║
 ╚══════════════════════════════════════════════════╝
 """
 
