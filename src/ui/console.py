@@ -363,8 +363,8 @@ class AgentConsole:
         label = labels.get(tool_name, "工具调用")
         bstyle = border_map.get(tool_name, "white")
 
-        # ── Line 1: tool name ─────────────────────────────────────────
-        line1 = f"[bold]{icon} {label}[/]"
+        # ── Line 1: tool name (English + Chinese label) ──────────────
+        line1 = f"[bold]{icon} {label}[/]  [dim]({tool_name})[/]"
 
         # ── Line 2: parameters (single line) ──────────────────────────
         param_parts = []
@@ -427,10 +427,10 @@ class AgentConsole:
             else "markdown" if tool_name == "web_search"
             else "text"
         )
-        collapsible_content = f"{label}\n参数: {line2}\n结果: {result}"
+        collapsible_content = f"{label} ({tool_name})\n参数: {line2}\n结果: {result}"
         self._collapsible.add_section(
             CollapsibleSection(
-                title=f"{icon} {label}",
+                title=f"{icon} {label} ({tool_name})",
                 content=collapsible_content,
                 border_style=bstyle,
                 renderable_type=rtype,
