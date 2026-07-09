@@ -1,8 +1,12 @@
 \[x] 模型的思考内容需要用浅色的字体显示出来，但是不需要记录到session中。
 
-\[ ] 工具调用 的panel，在控制台输出的时候需要渲染工具的名称。
+\[ ] 思考内容有时会展示为`{"result": "SAFE", "reason": "The 'dir /s /b \*.py' command lists all Python files recursively without modifying any
 
-\[ ] 命令调用的时候不要输出”command=“字样。文件读取的时候不要输出path=，直接输出文件路径就好了。
+data; it is a read-only operation."}`，需要分析原因。（不交代给becode实现） 
+
+\[x] 工具调用 的panel，在控制台输出的时候需要渲染工具的名称。
+
+\[ ] 命令调用的时候不要输出‘command=’字样。文件读取的时候不要输出path=，直接输出文件路径就好了，并且命令中存在的\\n需要转义后再渲染（注意到命令中的\\n会使得实际渲染的时候被渲染换行）。
 
 \[ ] reviewer的输出报告中已经包含了下一轮反馈，同时控制台又重复输出了需要修复的panel（成功的时候的标题是“审查通过”）。删除失败时后面的需要输出的panel设计，仅在成功的时候输出。
 

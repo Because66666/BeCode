@@ -26,4 +26,9 @@
 - 具体的文件级工程记忆已移入对应源文件的头部注释中，搜索 `╔══════════════════════════════════════════════════╗` 即可查阅。
 - **每轮 Coder 上下文必须干净**：`session_store` 不提供 `get_coder_context()`/`get_reviewer_context()`。Orchestrator 只将 reviewer 的「下一轮反馈」传给 Coder；Coder 每次新建 agent 实例，只接单条 HumanMessage，不含前一轮的思考/工具调用。
 - **模型的思考内容（chain-of-thought）用浅色字体展示，不记录到 session**：`ToolCallCapture.on_llm_end` 提取 LLM 响应的推理文本，通过 `console.show_thinking()` 以 `italic bright_black`（浅灰色斜体）展示。该内容故意不加入 `_tool_calls`，因此不会进入 `session.add_entry()` 的 metadata 中。
+- **工具调用 Panel 渲染时，Line 1 末尾附加 `[dim]({tool_name})[/]` 显示工具的原始英文名**（如 `read_file`、`bash_exec`），collapsible section 的标题和内容中也同步包含工具名称。
+- **工具调用参数渲染偏好**：
+  - `bash_exec` 的参数行不放 `command=` 前缀，直接显示命令内容。
+  - `read_file`/`edit_file` 的参数行不放 `path=`/`file_path=` 前缀，直接显示路径。
+  - 所有参数值中的 `\n` 需转义为 `\\n`，避免在 Rich Text 渲染时被换行。
 

@@ -11,6 +11,8 @@ Provides a Claude Code-style terminal interface with:
 ║  - tool_call() 方法只展示三行: 工具名称、参数、  ║
 ║    执行结果（单行截断 ≤100 字符）。              ║
 ║    移除了 tool_call_start / tool_call_end。      ║
+║  - Line 1 末尾附带 `(tool_name)` 显示工具       ║
+║    原始英文名（如 read_file, bash_exec）。        ║
 ║  - final_result() 移除了并排 Table，仅保留       ║
 ║    紧凑统计信息 Panel。                          ║
 ║  - 移除了 enter_interactive_mode() 方法。        ║
@@ -370,19 +372,25 @@ class AgentConsole:
         param_parts = []
         for k, v in args.items():
             val_str = str(v)
+            # Escape literal \n so they don't render as actual newlines
+            val_str = val_str.replace("\n", "\\n").replace("\r", "\\r")
             # For file tools, shorten to relative path
             if tool_name in ("read_file", "edit_file") and k in ("path", "file_path"):
                 val_str = self._short_path(val_str)
-            # For bash_exec, show the command
-            if tool_name == "bash_exec" and k == "command":
+                # File tools: just show the path, no "path=" prefix
+                param_parts.append(val_str)
+            elif tool_name == "bash_exec" and k == "command":
                 val_str = val_str.strip()
+                # bash_exec: just show the command, no "command=" prefix
                 # Truncate long commands
                 if len(val_str) > 80:
                     val_str = val_str[:77] + "..."
-            # Truncate long values
-            if len(val_str) > 60:
-                val_str = val_str[:57] + "..."
-            param_parts.append(f"{k}={val_str}")
+                param_parts.append(val_str)
+            else:
+                # Truncate long values
+                if len(val_str) > 60:
+                    val_str = val_str[:57] + "..."
+                param_parts.append(f"{k}={val_str}")
         line2 = " | ".join(param_parts) if param_parts else "(无参数)"
 
         # ── Line 3: result (single line, truncated) ───────────────────
