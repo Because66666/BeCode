@@ -31,6 +31,7 @@ from src.agents.coder_agent import run_coder
 from src.agents.reviewer_agent import run_reviewer
 from src.core.config import settings
 from src.core.session_store import SessionStore
+from src.tools.tools import set_user_requirement
 from src.ui.console import get_console
 from src.ui.callbacks import ToolCallCapture
 
@@ -174,6 +175,9 @@ class Orchestrator:
         self.session.requirement = requirement
         self.session.status = "running"
         self.session.save()
+        # Expose the requirement to BashGuard so its LLM review can judge
+        # commands against the actual task context.
+        set_user_requirement(requirement)
         logger.info(
             "Orchestrator start | session=%s | max_iterations=%d",
             self.session.session_id,

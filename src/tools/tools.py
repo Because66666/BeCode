@@ -16,6 +16,10 @@ Three tools:
 ║    "🔒 安全审查: {reason}"，取代此前安全模型      ║
 ║    输出被误渲染为 agent 思考过程(show_thinking)   ║
 ║    的问题。                                      ║
+║  - bash_exec 现将当前 user_requirement 传给      ║
+║    BashGuard（由 Orchestrator 经                 ║
+║    set_user_requirement() 设置），供 LLM 审查     ║
+║    时结合任务上下文判断命令意图。                 ║
 ╚══════════════════════════════════════════════════╝
 """
 
@@ -32,12 +36,24 @@ from src.tools.bash_guard import check_command
 logger = logging.getLogger(__name__)
 
 _WORKSPACE_ROOT: Optional[Path] = None
+_USER_REQUIREMENT: str = ""
 
 
 def set_workspace_root(path: str | Path):
     """Set the allowed workspace root for file operations."""
     global _WORKSPACE_ROOT
     _WORKSPACE_ROOT = Path(path).resolve()
+
+
+def set_user_requirement(requirement: str):
+    """Set the current user requirement.
+
+    Passed to BashGuard so the LLM safety review can judge the command
+    against the actual task context. Should be called by the Orchestrator
+    at the start of each run.
+    """
+    global _USER_REQUIREMENT
+    _USER_REQUIREMENT = requirement or ""
 
 
 def load_context_files() -> str:
@@ -204,9 +220,7 @@ def bash_exec(command: str, timeout_seconds: int = 60) -> str:
         stdout + stderr of the command, or an error message.
     """
     # 1. Safety check via BashGuard
-    from src.core.config import settings
-
-    guard_result = check_command(command, user_requirement="")
+    guard_result = check_command(command, user_requirement=_USER_REQUIREMENT)
 
     # Build guard info line (shown first in tool output)
     guard_info = f"🔒 安全审查: {guard_result.reason}"
