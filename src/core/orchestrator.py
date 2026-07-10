@@ -261,6 +261,8 @@ class Orchestrator:
 
             if is_pass:
                 logger.info("Reviewer PASS — workflow complete")
+                # 审查通过时才显示「审查通过」面板；失败时 reviewer 报告中已包含
+                # 完整反馈，不再重复输出「需要修复」面板。
                 console.review_verdict(is_pass=True)
                 self.session.status = "completed"
                 self.session.save()
@@ -282,7 +284,9 @@ class Orchestrator:
                 "Reviewer FAIL — extracted %d chars of actionable feedback",
                 len(feedback),
             )
-            console.review_verdict(is_pass=False, feedback=feedback)
+            # 失败时不再重复输出「需要修复」面板，因为 reviewer 的完整报告中
+            # 已包含「下一轮反馈」内容。见 console.review_verdict()。
+            # console.review_verdict(is_pass=False, feedback=feedback)
 
         # ── Out of iterations ────────────────────────────────────────
         logger.warning("Max iterations (%d) reached without pass", self.max_iterations)
