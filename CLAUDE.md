@@ -38,4 +38,6 @@
 - JSON 解析错误（`OutputParserException`）归类为「工具调用错误」。
 - Reviewer Agent 同样有重试机制（3 次重试，第 4 次产生占位判决，
   不中断循环）。
+- `bash_guard.py` 新增 allowlist 机制（`ALLOWED_PREFIXES` 列表 + `_is_allowed()`），
+  匹配的命令可跳过规则检查和 LLM 审查直接放行。当前 allowlist 包含 `codegraph explore`。
 
