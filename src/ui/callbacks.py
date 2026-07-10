@@ -106,38 +106,15 @@ class ToolCallCapture(BaseCallbackHandler):
         inputs: Optional[dict[str, Any]] = None,
         **kwargs: Any,
     ) -> Any:
-        """Called when a tool starts executing.
+        """Called when a tool starts executing."""
+        tool_name = serialized.get("name", "unknown_tool")
 
-        In LangGraph 1.2.7+ / LangChain 1.3.11+, the callback may fire
-        from a path where ``serialized`` lacks the ``name`` field and
-        ``inputs`` / ``input_str`` are empty (e.g. when the callback is
-        inherited from a parent run, or when the ToolNode uses a thread
-        pool and contextvars are lost).  We defensively extract the tool
-        name from multiple sources.
-        """
-        # ── Tool name: try serialized first, then kwargs name, then fallback ─
-        tool_name = ""
-        if serialized:
-            tool_name = serialized.get("name", "") or ""
-        if not tool_name:
-            tool_name = kwargs.get("name", "") or ""
-        if not tool_name:
-            tool_name = "unknown_tool"
-
-        # ── Tool arguments ───────────────────────────────────────────
-        args: dict[str, str] = {}
+        # Extract tool arguments
+        args = {}
         if inputs:
             args = {k: str(v) for k, v in inputs.items()}
         elif input_str:
             args = {"input": input_str[:200]}
-
-        # Log a warning so we can detect this in production
-        if tool_name == "unknown_tool" or not args:
-            logger.debug(
-                "on_tool_start received minimal callback data: "
-                "tool_name=%r args=%r serialized=%s inputs=%r",
-                tool_name, args, serialized, inputs,
-            )
 
         self._current_tool = tool_name
         self._current_tool_args = args
@@ -190,24 +167,6 @@ class ToolCallCapture(BaseCallbackHandler):
         return None
 
     # ── LLM / Chain-of-thought ────────────────────────────────────────
-
-    def on_llm_start(
-        self,
-        serialized: dict[str, Any],
-        prompts: list[str],
-        *,
-        run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
-        tags: Optional[list[str]] = None,
-        metadata: Optional[dict[str, Any]] = None,
-        **kwargs: Any,
-    ) -> Any:
-        """Called when LLM starts — signals agent thinking."""
-        # Only show thinking at the start of a chain (not for each tool's
-        # underlying LLM call) by checking if there's no parent run.
-        if parent_run_id is None:
-            self._console.agent_thinking(self.agent_name)
-        return None
 
     def on_llm_end(
         self,
@@ -296,18 +255,3 @@ class ToolCallCapture(BaseCallbackHandler):
         # Only on_tool_start records tool invocations for session persistence.
         return None
 
-    def on_chain_start(
-        self,
-        serialized: dict[str, Any],
-        inputs: dict[str, Any],
-        *,
-        run_id: UUID,
-        parent_run_id: Optional[UUID] = None,
-        tags: Optional[list[str]] = None,
-        metadata: Optional[dict[str, Any]] = None,
-        **kwargs: Any,
-    ) -> Any:
-        """Called when an agent chain starts."""
-        if parent_run_id is None:
-            self._console.agent_thinking(self.agent_name)
-        return None
