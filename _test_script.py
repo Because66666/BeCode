@@ -1,2 +1,0 @@
-"""ToolCallCapture — LangChain callback handler.
-

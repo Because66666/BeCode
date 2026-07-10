@@ -76,7 +76,7 @@ An UNSAFE command is one that:
 - Shuts down or reboots the system
 - Wipes or formats storage
 - Executes a fork bomb or resource exhaustion attack
-- Downloads and runs untrusted code (curl | sh, wget | bash)
+- Downloads and runs untrusted code (unless user explicitly requests it)
 - Exfiltrates data to an external server
 - Installs malware, rootkits, or backdoors
 - Modifies system files (/etc/passwd, /etc/sudoers, /etc/shadow, /boot/*)
