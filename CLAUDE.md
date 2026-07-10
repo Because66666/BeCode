@@ -40,4 +40,11 @@
   不中断循环）。
 - `bash_guard.py` 新增 allowlist 机制（`ALLOWED_PREFIXES` 列表 + `_is_allowed()`），
   匹配的命令可跳过规则检查和 LLM 审查直接放行。当前 allowlist 包含 `codegraph explore`。
+- 测试文件位于 `tests/` 目录，覆盖所有模块：config, llm_client, session_store, tools,
+  bash_guard, web_search, orchestrator, console, callbacks, collapsible,
+  coder_agent, reviewer_agent, main。
+- 运行全部测试命令：`python -m pytest tests/ -v`（或 `pytest tests/ -v`）。
+- 由于 `@tool` 装饰器返回 `StructuredTool` 对象，测试中使用 `tool.func()` 
+  调用原始函数（通过 `_call(tool, *args)` 辅助函数）。
+- 环境变量 `BASH_GUARD_LLM_DISABLED=1` 在测试中自动设置以跳过 LLM 安全审查层。
 

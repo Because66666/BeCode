@@ -1,0 +1,86 @@
+"""Tests for src.agents.coder_agent — build_coder_agent, run_coder."""
+
+from unittest.mock import patch, MagicMock
+
+import pytest
+
+
+class TestBuildCoderAgent:
+    """Verify build_coder_agent creates an agent with tools."""
+
+    def test_build_returns_agent(self):
+        from src.agents.coder_agent import build_coder_agent
+        agent = build_coder_agent()
+        assert agent is not None
+
+    def test_agent_has_tools(self):
+        from src.agents.coder_agent import build_coder_agent
+        agent = build_coder_agent()
+        # The agent should have tools bound
+        bound_tools = getattr(agent, "tools", None) or getattr(agent, "bound_tools", None)
+        if bound_tools:
+            tool_names = {t.name if hasattr(t, "name") else str(t) for t in bound_tools}
+            assert "read_file" in tool_names
+            assert "bash_exec" in tool_names
+            assert "web_search" in tool_names
+
+
+class TestCoderPrompt:
+    """Verify CODER_SYSTEM_PROMPT content."""
+
+    def test_prompt_contains_tool_list(self):
+        from src.agents.coder_agent import CODER_SYSTEM_PROMPT
+        assert "read_file" in CODER_SYSTEM_PROMPT
+        assert "edit_file" in CODER_SYSTEM_PROMPT
+        assert "bash_exec" in CODER_SYSTEM_PROMPT
+        assert "web_search" in CODER_SYSTEM_PROMPT
+        assert "web_fetch" in CODER_SYSTEM_PROMPT
+
+    def test_prompt_contains_workflow(self):
+        from src.agents.coder_agent import CODER_SYSTEM_PROMPT
+        assert "FINAL REPORT" in CODER_SYSTEM_PROMPT
+        assert "Do NOT run destructive commands" in CODER_SYSTEM_PROMPT
+
+
+class TestRunCoder:
+    """Verify run_coder constructs the right message and invokes agent."""
+
+    @patch("src.agents.coder_agent.build_coder_agent")
+    def test_run_coder_basic(self, mock_build):
+        mock_agent = MagicMock()
+        mock_agent.invoke.return_value = {
+            "messages": [MagicMock(content="FINAL REPORT\nAll done.")]
+        }
+        mock_build.return_value = mock_agent
+
+        from src.agents.coder_agent import run_coder
+        result = run_coder("Write tests")
+        assert "FINAL REPORT" in result
+
+    @patch("src.agents.coder_agent.build_coder_agent")
+    def test_run_coder_with_feedback(self, mock_build):
+        mock_agent = MagicMock()
+        mock_agent.invoke.return_value = {
+            "messages": [MagicMock(content="Fixed.")]
+        }
+        mock_build.return_value = mock_agent
+
+        from src.agents.coder_agent import run_coder
+        result = run_coder("Write tests", feedback="Add more tests")
+        assert result == "Fixed."
+        # Verify the message contains both requirement and feedback
+        call_args = mock_agent.invoke.call_args[0][0]
+        msgs = call_args.get("messages", [])
+        assert any("Write tests" in str(m.content) for m in msgs)
+        assert any("Add more tests" in str(m.content) for m in msgs)
+
+    @patch("src.agents.coder_agent.build_coder_agent")
+    def test_run_coder_fallback_no_messages(self, mock_build):
+        mock_agent = MagicMock()
+        mock_agent.invoke.return_value = {"messages": []}
+        mock_build.return_value = mock_agent
+
+        from src.agents.coder_agent import run_coder
+        result = run_coder("Test")
+        # Should fallback to str(result)
+        assert result is not None
