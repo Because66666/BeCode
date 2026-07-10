@@ -110,15 +110,20 @@ class GuardResult:
 # LLM review.  Matching is done by checking if the command *starts with*
 # one of these prefixes (whitespace-trimmed).
 ALLOWED_PREFIXES: list[str] = [
-    "codegraph explore",
+    "codegraph explore",          # exact prefix match; must be followed by space or end-of-string
 ]
 
 
 def _is_allowed(command: str) -> bool:
-    """Return True if *command* matches an allowed prefix (fast path)."""
+    """Return True if *command* matches an allowed prefix (fast path).
+
+    Uses an exact match or prefix-then-space check so that
+    ``codegraph explore-remote`` is NOT accidentally allowed by the
+    ``codegraph explore`` prefix.
+    """
     stripped = command.strip()
     for prefix in ALLOWED_PREFIXES:
-        if stripped.startswith(prefix):
+        if stripped == prefix or stripped.startswith(prefix + " "):
             return True
     return False
 
