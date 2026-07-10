@@ -14,6 +14,11 @@ registered directly into the agent's tool list.
 ║  - web_fetch: 基于 requests+BeautifulSoup 的     ║
 ║    网页内容提取                                   ║
 ║  - 注册在 src/tools/web_search.py 中             ║
+║  - 工具返回值长度限制: 所有工具的返回值若超过     ║
+║    MAX_TOOL_OUTPUT_LENGTH(=40000) 字符，会被强制   ║
+║    替换为提示消息「命令返回长度超过10ktoken，     ║
+║    请检查后重试」。_apply_output_limit() 为辅助     ║
+║    函数，封装截断逻辑。                           ║
 ╚══════════════════════════════════════════════════╝
 """
 
@@ -38,6 +43,24 @@ USER_AGENT = (
     "Chrome/125.0.0.0 Safari/537.36"
 )
 BING_SEARCH_URL = "https://www.bing.com/search"
+
+
+# ── Tool output length constraint ────────────────────────────────────
+
+MAX_TOOL_OUTPUT_LENGTH = 40000
+_TOOL_OUTPUT_TOO_LONG_MSG = "命令返回长度超过10ktoken，请检查后重试"
+
+
+def _apply_output_limit(result: str) -> str:
+    """Enforce a maximum character length on tool return values.
+
+    If the result string exceeds ``MAX_TOOL_OUTPUT_LENGTH`` characters, it is
+    replaced with a fixed prompt asking the agent to retry with a narrower
+    scope.
+    """
+    if len(result) > MAX_TOOL_OUTPUT_LENGTH:
+        return _TOOL_OUTPUT_TOO_LONG_MSG
+    return result
 
 
 # ── Tool 1: web_search (Bing) ─────────────────────────────────────────
@@ -125,11 +148,11 @@ def web_search(query: str, max_results: int = 5) -> str:
         )
         resp.raise_for_status()
     except requests.exceptions.Timeout:
-        return f"⏱️ Bing 搜索请求超时 (>{REQUEST_TIMEOUT}s): {query[:80]}"
+        return _apply_output_limit(f"⏱️ Bing 搜索请求超时 (>{REQUEST_TIMEOUT}s): {query[:80]}")
     except requests.exceptions.HTTPError as e:
-        return f"Bing 搜索失败: HTTP {e.response.status_code} — {query[:80]}"
+        return _apply_output_limit(f"Bing 搜索失败: HTTP {e.response.status_code} — {query[:80]}")
     except requests.exceptions.ConnectionError:
-        return f"连接失败 (DNS 解析或网络不可达): {query[:80]}"
+        return _apply_output_limit(f"连接失败 (DNS 解析或网络不可达): {query[:80]}")
     except Exception as exc:
         logger.warning("Bing search failed: %s", exc)
         # Retry once after a short delay
@@ -144,13 +167,13 @@ def web_search(query: str, max_results: int = 5) -> str:
             )
             resp.raise_for_status()
         except Exception as exc2:
-            return f"搜索失败 (Bing 不可达): {exc2}"
+            return _apply_output_limit(f"搜索失败 (Bing 不可达): {exc2}")
 
     html = resp.text
     results = _parse_bing_html(html, max_results)
 
     if not results:
-        return f"未找到与「{query}」相关的结果。"
+        return _apply_output_limit(f"未找到与「{query}」相关的结果。")
 
     lines = [f"## 搜索结果 (Bing): 「{query}」\n"]
     for i, r in enumerate(results, 1):
@@ -165,7 +188,7 @@ def web_search(query: str, max_results: int = 5) -> str:
             lines.append(f"   🔗 {url}")
         lines.append("")
 
-    return "\n".join(lines).strip()
+    return _apply_output_limit("\n".join(lines).strip())
 
 
 # ── Tool 2: web_fetch ─────────────────────────────────────────────────
@@ -188,9 +211,9 @@ def web_fetch(url: str, max_chars: int = 5000) -> str:
     # ── Validate URL ──────────────────────────────────────────────────
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
-        return f"错误: 不支持的协议「{parsed.scheme}」，仅支持 http/https"
+        return _apply_output_limit(f"错误: 不支持的协议「{parsed.scheme}」，仅支持 http/https")
     if not parsed.netloc:
-        return f"错误: 无效的 URL: {url}"
+        return _apply_output_limit(f"错误: 无效的 URL: {url}")
 
     max_chars = max(500, min(max_chars, 50_000))  # clamp
 
@@ -204,18 +227,18 @@ def web_fetch(url: str, max_chars: int = 5000) -> str:
         )
         resp.raise_for_status()
     except requests.exceptions.Timeout:
-        return f"⏱️ 请求超时 (>{REQUEST_TIMEOUT}s): {url[:100]}"
+        return _apply_output_limit(f"⏱️ 请求超时 (>{REQUEST_TIMEOUT}s): {url[:100]}")
     except requests.exceptions.HTTPError as e:
-        return f"HTTP 错误: {e.response.status_code} — {url[:100]}"
+        return _apply_output_limit(f"HTTP 错误: {e.response.status_code} — {url[:100]}")
     except requests.exceptions.ConnectionError:
-        return f"连接失败 (DNS 解析或网络不可达): {url[:100]}"
+        return _apply_output_limit(f"连接失败 (DNS 解析或网络不可达): {url[:100]}")
     except Exception as e:
-        return f"请求失败: {e}"
+        return _apply_output_limit(f"请求失败: {e}")
 
     # ── Safety: check content size ────────────────────────────────────
     content_bytes = resp.content
     if len(content_bytes) > MAX_FETCH_SIZE:
-        return (
+        return _apply_output_limit(
             f"页面过大 ({len(content_bytes) / 1024:.0f} KB)，"
             f"超过安全限制 ({MAX_FETCH_SIZE / 1024:.0f} KB)"
         )
@@ -226,11 +249,11 @@ def web_fetch(url: str, max_chars: int = 5000) -> str:
         if "json" in content_type:
             # Return raw JSON text (truncated)
             raw = resp.text[:max_chars]
-            return f"🔗 {url}\n\n```json\n{raw}\n```"
+            return _apply_output_limit(f"🔗 {url}\n\n```json\n{raw}\n```")
 
         soup = BeautifulSoup(resp.content, "html.parser")
     except Exception as e:
-        return f"解析 HTML 失败: {e}"
+        return _apply_output_limit(f"解析 HTML 失败: {e}")
 
     # ── Remove unwanted elements ──────────────────────────────────────
     for tag in ("script", "style", "nav", "footer", "header", "aside", "noscript"):
@@ -256,7 +279,7 @@ def web_fetch(url: str, max_chars: int = 5000) -> str:
     if title:
         header += f"\n📄 {title}"
 
-    return f"{header}\n\n{text}".strip()
+    return _apply_output_limit(f"{header}\n\n{text}".strip())
 
 
 # ── Convenience: list of all web tools ────────────────────────────────

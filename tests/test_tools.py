@@ -11,6 +11,8 @@ from src.tools.tools import (
     load_context_files,
     set_workspace_root,
     set_user_requirement,
+    _apply_output_limit,
+    MAX_TOOL_OUTPUT_LENGTH,
 )
 
 
@@ -165,3 +167,24 @@ class TestSetUserRequirement:
         from src.tools import tools as t
         set_user_requirement("")
         assert t._USER_REQUIREMENT == ""
+
+
+class TestApplyOutputLimit:
+    """Verify _apply_output_limit truncates long tool outputs."""
+
+    def test_short_string_passes_through(self):
+        short = "Hello, world!"
+        assert _apply_output_limit(short) == short
+
+    def test_exact_max_length_passes_through(self):
+        exact = "x" * MAX_TOOL_OUTPUT_LENGTH
+        assert _apply_output_limit(exact) == exact
+
+    def test_exceeds_max_length_truncated(self):
+        long_str = "x" * (MAX_TOOL_OUTPUT_LENGTH + 1)
+        result = _apply_output_limit(long_str)
+        expected = "命令返回长度超过10ktoken，请检查后重试"
+        assert result == expected
+
+    def test_empty_string_passes_through(self):
+        assert _apply_output_limit("") == ""

@@ -20,6 +20,10 @@ Three tools:
 ║    BashGuard（由 Orchestrator 经                 ║
 ║    set_user_requirement() 设置），供 LLM 审查     ║
 ║    时结合任务上下文判断命令意图。                 ║
+║  - 工具返回值长度限制: 所有工具的返回值若超过                               ║
+║    MAX_TOOL_OUTPUT_LENGTH(=40000) 字符，会被强制替换为提示消息              ║
+║    「命令返回长度超过10ktoken，请检查后重试」。                             ║
+║    _apply_output_limit() 为辅助函数，封装截断逻辑。                        ║
 ╚══════════════════════════════════════════════════╝
 """
 
@@ -96,6 +100,24 @@ def _resolve_path(path: str | Path) -> Path:
     return p
 
 
+# ── Tool output length constraint ────────────────────────────────────
+
+MAX_TOOL_OUTPUT_LENGTH = 40000
+_TOOL_OUTPUT_TOO_LONG_MSG = "命令返回长度超过10ktoken，请检查后重试"
+
+
+def _apply_output_limit(result: str) -> str:
+    """Enforce a maximum character length on tool return values.
+
+    If the result string exceeds ``MAX_TOOL_OUTPUT_LENGTH`` characters, it is
+    replaced with a fixed prompt asking the agent to retry with a narrower
+    scope.
+    """
+    if len(result) > MAX_TOOL_OUTPUT_LENGTH:
+        return _TOOL_OUTPUT_TOO_LONG_MSG
+    return result
+
+
 # ── Tool 1: read_file ──────────────────────────────────────────────
 
 
@@ -114,19 +136,19 @@ def read_file(path: str, offset: Optional[int] = None, limit: Optional[int] = No
     try:
         p = _resolve_path(path)
     except PermissionError as e:
-        return f"错误: {e}"
+        return _apply_output_limit(f"错误: {e}")
     except Exception as e:
-        return f"路径解析失败: {e}"
+        return _apply_output_limit(f"路径解析失败: {e}")
 
     if not p.exists():
-        return f"错误: 文件不存在: {p}"
+        return _apply_output_limit(f"错误: 文件不存在: {p}")
     if not p.is_file():
-        return f"错误: 路径不是文件: {p}"
+        return _apply_output_limit(f"错误: 路径不是文件: {p}")
 
     try:
         lines = p.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
     except Exception as e:
-        return f"读取文件失败: {e}"
+        return _apply_output_limit(f"读取文件失败: {e}")
 
     total = len(lines)
 
@@ -143,7 +165,7 @@ def read_file(path: str, offset: Optional[int] = None, limit: Optional[int] = No
     selected = lines[start:end]
     numbered = "".join(f"{i + 1}\t{line}" for i, line in enumerate(selected, start=start + 1))
     summary = f"文件: {p} ({total} 行, 显示 {start + 1}-{end})\n"
-    return summary + numbered
+    return _apply_output_limit(summary + numbered)
 
 
 # ── Tool 2: edit_file ──────────────────────────────────────────────
@@ -167,38 +189,38 @@ def edit_file(path: str, old_string: str, new_string: str) -> str:
     try:
         p = _resolve_path(path)
     except PermissionError as e:
-        return f"错误: {e}"
+        return _apply_output_limit(f"错误: {e}")
     except Exception as e:
-        return f"路径解析失败: {e}"
+        return _apply_output_limit(f"路径解析失败: {e}")
 
     if not p.exists():
         # 文件不存在时，如果父目录存在则自动创建文件（而非报错）
         if not p.parent.exists():
-            return f"错误: 文件路径不存在: {p.parent}"
+            return _apply_output_limit(f"错误: 文件路径不存在: {p.parent}")
         try:
             p.touch(exist_ok=True)
         except Exception as e:
-            return f"创建文件失败: {e}"
+            return _apply_output_limit(f"创建文件失败: {e}")
 
     try:
         content = p.read_text(encoding="utf-8", errors="replace")
     except Exception as e:
-        return f"读取文件失败: {e}"
+        return _apply_output_limit(f"读取文件失败: {e}")
 
     if old_string not in content:
-        return "错误: 未找到要替换的字符串，请确保 `old_string` 与文件内容完全匹配"
+        return _apply_output_limit("错误: 未找到要替换的字符串，请确保 `old_string` 与文件内容完全匹配")
 
     count = content.count(old_string)
     if count > 1:
-        return f"错误: `old_string` 在文件中出现 {count} 次，请确保唯一性"
+        return _apply_output_limit(f"错误: `old_string` 在文件中出现 {count} 次，请确保唯一性")
 
     new_content = content.replace(old_string, new_string, 1)
     try:
         p.write_text(new_content, encoding="utf-8")
     except Exception as e:
-        return f"写入文件失败: {e}"
+        return _apply_output_limit(f"写入文件失败: {e}")
 
-    return f"成功: 已编辑文件 {p} (替换了 {len(old_string)} → {len(new_string)} 个字符)"
+    return _apply_output_limit(f"成功: 已编辑文件 {p} (替换了 {len(old_string)} → {len(new_string)} 个字符)")
 
 
 # ── Tool 3: bash_exec ──────────────────────────────────────────────
@@ -226,7 +248,7 @@ def bash_exec(command: str, timeout_seconds: int = 60) -> str:
     guard_info = f"安全审查: {guard_result.reason}"
 
     if not guard_result.approved:
-        return (
+        return _apply_output_limit(
             f"⛔ 命令被安全系统拦截\n"
             f"{guard_info}\n"
             f"命令: {command[:200]}"
@@ -244,9 +266,9 @@ def bash_exec(command: str, timeout_seconds: int = 60) -> str:
             cwd=str(_WORKSPACE_ROOT) if _WORKSPACE_ROOT else None,
         )
     except subprocess.TimeoutExpired:
-        return f"⏱️ 命令执行超时 (>{timeout}s)\n命令: {command[:200]}"
+        return _apply_output_limit(f"⏱️ 命令执行超时 (>{timeout}s)\n命令: {command[:200]}")
     except Exception as e:
-        return f"执行失败: {e}"
+        return _apply_output_limit(f"执行失败: {e}")
 
     # 3. Build output (prepend guard info)
     output_parts = [guard_info]
@@ -261,4 +283,4 @@ def bash_exec(command: str, timeout_seconds: int = 60) -> str:
     body = "\n".join(output_parts)
     retcode = result.returncode
     summary = f"exit code: {retcode}"
-    return f"{summary}\n{body}"
+    return _apply_output_limit(f"{summary}\n{body}")

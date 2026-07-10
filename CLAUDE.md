@@ -7,7 +7,7 @@
 
 当你需要探索项目代码的时候，**优先使用CodeGraph**理解和定位代码。具体方式如下：
 
-- **Shell 命令**：执行 `codegraph explore "<符号名或问题>"` 一次调用即可回答大多数代码问题——它会返回相关符号的**逐行源代码（带行号）**，以及这些符号之间的**调用路径**，甚至能跟踪 `grep` 无法追踪的**动态分发（dynamic dispatch）跳转**。你可以在查询中指定某个文件或符号名，以读取其当前带行号的源代码。如果输出中列出某项但标记为“延迟加载（deferred）”，可通过工具搜索按名称加载它。
+- **Shell 命令**：执行 `codegraph explore "<符号名或问题>"` 一次调用即可回答大多数代码问题——它会返回相关符号的**逐行源代码（带行号）**，以及这些符号之间的**调用路径**，甚至能跟踪**动态分发（dynamic dispatch）跳转**。你可以在查询中指定某个文件或符号名，以读取其当前带行号的源代码。如果输出中列出某项但标记为“延迟加载（deferred）”，可通过工具搜索按名称加载它。
 
 ## Learned User Preferences
 
@@ -55,4 +55,9 @@
   `get_token_tracker().reset()` 重置计数器。
 - 统计信息面板（`console.final_result()`）新增显示「输入Tokens」「输出Tokens」「合计」，
   支持 K/M 单位格式化。
+- 工具返回值长度限制: 所有 Agent 工具（read_file, edit_file, bash_exec, web_search,
+  web_fetch）的返回值若超过 40,000 字符，会被强制替换为提示消息
+  「命令返回长度超过10ktoken，请检查后重试」。
+  实现在 `src/tools/tools.py` 和 `src/tools/web_search.py` 中的
+  `_apply_output_limit()` 函数，常量 `MAX_TOOL_OUTPUT_LENGTH = 40000`。
 
