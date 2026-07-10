@@ -34,7 +34,7 @@ from src.tools.web_search import web_search, web_fetch
 
 logger = logging.getLogger(__name__)
 
-REVIEWER_SYSTEM_PROMPT = """You are a strict code review agent (Reviewer Agent). Your job is to verify
+REVIEWER_SYSTEM_PROMPT = """You are a strict code review agent (Reviewer Agent) in BeCode. Your job is to verify
 whether the Coder Agent has fully and correctly implemented the user's
 requirements.
 

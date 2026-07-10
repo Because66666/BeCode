@@ -390,7 +390,7 @@ class AgentConsole:
                 # Truncate long values
                 if len(val_str) > 60:
                     val_str = val_str[:57] + "..."
-                param_parts.append(f"{k}={val_str}")
+                param_parts.append(val_str)
         line2 = " | ".join(param_parts) if param_parts else "(无参数)"
 
         # ── Line 3: result (single line, truncated) ───────────────────
@@ -535,12 +535,32 @@ class AgentConsole:
 
     def final_result(self, success: bool, coder_report: str, review_verdict: str,
                      total_turns: int, session_id: str):
-        """Display the final workflow result (compact stats only)."""
+        """Display the final workflow result (compact stats with token usage)."""
         from rich.text import Text as RichText
+        from src.core.token_tracker import get_token_tracker
 
+        tracker = get_token_tracker()
         status_icon = "✅" if success else "⚠️"
         status_text = "成功" if success else "未完成"
         status_color = "green" if success else "yellow"
+
+        # ── Token usage formatting ───────────────────────────────────
+        inp_tok = tracker.total_input_tokens
+        out_tok = tracker.total_output_tokens
+        total_tok = inp_tok + out_tok
+
+        def _fmt(n: int) -> str:
+            if n >= 1_000_000:
+                return f"{n / 1_000_000:.1f}M"
+            if n >= 1_000:
+                return f"{n / 1_000:.1f}K"
+            return str(n)
+
+        token_str = (
+            f"[bold]输入Tokens:[/] [cyan]{_fmt(inp_tok)}[/]  │  "
+            f"[bold]输出Tokens:[/] [cyan]{_fmt(out_tok)}[/]  │  "
+            f"[bold]合计:[/] [cyan]{_fmt(total_tok)}[/]"
+        )
 
         # ── Compact statistics ───────────────────────────────────────
         coder_k_len = f"{len(coder_report) / 1000:.1f}K"
@@ -548,7 +568,8 @@ class AgentConsole:
             f"[bold]状态:[/] [{status_color}]{status_icon} {status_text}[/]  │  "
             f"[bold]轮次:[/] [white]{total_turns}[/]  │  "
             f"[bold]会话ID:[/] [dim]{session_id}[/]  │  "
-            f"[bold]Coder上下文:[/] [cyan]{coder_k_len}[/]"
+            f"[bold]Coder上下文:[/] [cyan]{coder_k_len}[/]\n"
+            f"{token_str}"
         )
         self._console.print()
         self._console.print(

@@ -31,7 +31,7 @@ from src.tools.web_search import web_search, web_fetch
 
 logger = logging.getLogger(__name__)
 
-CODER_SYSTEM_PROMPT = """You are an expert coding assistant (Coder Agent). Your goal is to implement
+CODER_SYSTEM_PROMPT = """You are an expert coding assistant (Coder Agent) in BeCode. Your goal is to implement
 the user's requirements by reading, editing files and running commands.
 
 You have access to these tools:

@@ -47,4 +47,12 @@
 - 由于 `@tool` 装饰器返回 `StructuredTool` 对象，测试中使用 `tool.func()` 
   调用原始函数（通过 `_call(tool, *args)` 辅助函数）。
 - 环境变量 `BASH_GUARD_LLM_DISABLED=1` 在测试中自动设置以跳过 LLM 安全审查层。
+- Token 用量追踪: `src/core/token_tracker.py` 提供全局 `TokenTracker` 单例（`get_token_tracker()`），
+  在 `ToolCallCapture.on_llm_end()` 中自动捕获每次 LLM 调用的输入/输出 tokens
+  （从 `LLMResult.llm_output.token_usage` 或 `AIMessage.usage_metadata` 提取），
+  并累计到会话级计数器。
+- Orchestrator 在每次 `run()` 和 `run_interactive()` 开始时调用
+  `get_token_tracker().reset()` 重置计数器。
+- 统计信息面板（`console.final_result()`）新增显示「输入Tokens」「输出Tokens」「合计」，
+  支持 K/M 单位格式化。
 

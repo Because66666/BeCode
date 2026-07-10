@@ -44,6 +44,7 @@ from src.agents.coder_agent import run_coder
 from src.agents.reviewer_agent import run_reviewer
 from src.core.config import settings
 from src.core.session_store import SessionStore
+from src.core.token_tracker import get_token_tracker
 from src.tools.tools import set_user_requirement
 from src.ui.console import get_console
 from src.ui.callbacks import ToolCallCapture
@@ -147,6 +148,9 @@ class Orchestrator:
               - interrupted: bool  (True if Ctrl+C was caught)
               - has_formal_output: bool  (True if partial LLM output exists)
         """
+        # Reset token tracker for this round's statistics
+        get_token_tracker().reset()
+
         # Build the enriched requirement with previous task summaries
         enriched_requirement = requirement
         if summary_context:
@@ -251,6 +255,8 @@ class Orchestrator:
         self.session.requirement = requirement
         self.session.status = "running"
         self.session.save()
+        # Reset token tracker for this run's statistics
+        get_token_tracker().reset()
         # Expose the requirement to BashGuard so its LLM review can judge
         # commands against the actual task context.
         set_user_requirement(requirement)

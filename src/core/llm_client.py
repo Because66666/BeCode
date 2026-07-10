@@ -2,6 +2,8 @@
 
 Uses the OpenAI-compatible protocol so it works with OpenAI, vLLM,
 OneAPI, Ollama (with openai compat), etc.
+
+Token tracking is handled by ``src.core.token_tracker``.
 """
 
 from typing import Optional

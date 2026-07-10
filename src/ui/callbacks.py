@@ -31,6 +31,7 @@ from uuid import UUID
 
 from langchain_core.callbacks import BaseCallbackHandler
 
+from src.core.token_tracker import get_token_tracker
 from src.ui.console import get_console
 
 logger = logging.getLogger(__name__)
@@ -196,8 +197,11 @@ class ToolCallCapture(BaseCallbackHandler):
     ) -> Any:
         """Called when LLM finishes generating.
 
-        Extracts the model's chain-of-thought / reasoning text from the
-        response and displays it in a light/dim color via the console.
+        Two tasks:
+        1. Extract the model's chain-of-thought / reasoning text from the
+           response and displays it in a light/dim color via the console.
+        2. Extract token usage metadata and accumulate it into the global
+           ``TokenTracker`` for session-level statistics.
 
         IMPORTANT: This thinking content is displayed for user transparency
         but is deliberately NOT added to ``self._tool_calls``, so it will
@@ -205,11 +209,40 @@ class ToolCallCapture(BaseCallbackHandler):
         (captured in ``on_tool_start``) are recorded in the session.
         """
         try:
-            # Extract text content from the LLM response.
-            # In LangChain 0.3+, ``LLMResult.generations`` is a list of lists
-            # of ``ChatGeneration`` objects (for chat models). Each generation
-            # has a ``.message`` attribute (``AIMessage``) with ``.content``.
-            # Plain text models use ``.text`` instead.
+            # ── Extract token usage ──────────────────────────────────
+            input_tokens: Optional[int] = None
+            output_tokens: Optional[int] = None
+
+            # Method 1: from llm_output (most reliable with ChatOpenAI)
+            llm_output = getattr(response, "llm_output", None) or {}
+            token_usage = llm_output.get("token_usage", {}) or {}
+            if token_usage:
+                input_tokens = token_usage.get("prompt_tokens")
+                output_tokens = token_usage.get("completion_tokens")
+
+            # Method 2: from AIMessage.usage_metadata (LangChain 0.3+)
+            if input_tokens is None or output_tokens is None:
+                generations = getattr(response, "generations", [])
+                for gen_list in generations:
+                    for gen in gen_list:
+                        msg = getattr(gen, "message", None)
+                        if msg is not None:
+                            usage = getattr(msg, "usage_metadata", None) or {}
+                            if usage:
+                                if input_tokens is None:
+                                    input_tokens = usage.get("input_tokens")
+                                if output_tokens is None:
+                                    output_tokens = usage.get("output_tokens")
+                                break
+                    if input_tokens is not None or output_tokens is not None:
+                        break
+
+            # Accumulate into the global tracker
+            if input_tokens is not None or output_tokens is not None:
+                tracker = get_token_tracker()
+                tracker.add_usage(input_tokens, output_tokens)
+
+            # ── Extract chain-of-thought text ─────────────────────────
             thought_parts: list[str] = []
             generations = getattr(response, "generations", [])
             for gen_list in generations:
@@ -232,7 +265,8 @@ class ToolCallCapture(BaseCallbackHandler):
                     self._console.show_thinking(combined)
 
         except Exception:
-            # Silently ignore — thinking display is non-critical
+            # Silently ignore — thinking display and token tracking are
+            # non-critical
             pass
 
         # NOTE: We do NOT add anything to self._tool_calls here.
