@@ -20,6 +20,7 @@
 
 ## Learned Workspace Facts
 
+- 使用 `scripts/crop_circle.py` 将 `favicon.png` 裁剪为正圆形，基于 Pillow (PIL) 实现，输出 `favicon_circle.png`。
 - 项目 `new_agent_workflow` 实现了一个双智能体编码工作流系统，使用 LangChain 1.3+ / LangGraph 架构。
 - 代码结构: `src/agents/`（coder + reviewer）、`src/tools/`（read_file, edit_file, bash_exec + bash_guard）、`src/core/`（config, llm_client, session_store, orchestrator）、`src/ui/`（console, callbacks, collapsible）。
 - 关键依赖: `langchain>=0.3`, `langchain-openai`, `langgraph`, `python-dotenv`, `pydantic-settings`, `requests`, `beautifulsoup4`, `rich`, `keyboard`。
