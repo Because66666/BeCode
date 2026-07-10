@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from src.core.config import settings, BECODE_HOME, SESSION_DIR
+from src.core.config import settings, BECODE_HOME, SESSION_DIR, ensure_config, reload_settings
 from src.core.orchestrator import Orchestrator
 from src.core.session_store import SessionStore
 from src.tools.tools import set_workspace_root
@@ -282,6 +282,10 @@ def main():
 
     # ── Ensure data directory exists ────────────────────────────────
     BECODE_HOME.mkdir(parents=True, exist_ok=True)
+
+    # ── First-run config check (interactive prompt if .env missing) ─
+    ensure_config()
+    reload_settings()  # Reload settings so newly created .env takes effect
 
     # ── Override max iterations if provided ─────────────────────────
     if args.max_iterations is not None:
