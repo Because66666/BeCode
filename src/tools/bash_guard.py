@@ -105,6 +105,24 @@ class GuardResult:
     command: str
 
 
+# ── allowlist (bypass all checks) ──────────────────────────────────
+# Commands in this list are allowed to run directly without rule or
+# LLM review.  Matching is done by checking if the command *starts with*
+# one of these prefixes (whitespace-trimmed).
+ALLOWED_PREFIXES: list[str] = [
+    "codegraph explore",
+]
+
+
+def _is_allowed(command: str) -> bool:
+    """Return True if *command* matches an allowed prefix (fast path)."""
+    stripped = command.strip()
+    for prefix in ALLOWED_PREFIXES:
+        if stripped.startswith(prefix):
+            return True
+    return False
+
+
 # ── public API ─────────────────────────────────────────────────────
 
 
@@ -118,6 +136,15 @@ def check_command(command: str, user_requirement: str = "") -> GuardResult:
     Returns:
         GuardResult with approved=True/False and a human-readable reason.
     """
+    # 0. Allowlist fast path — bypass all checks
+    if _is_allowed(command):
+        logger.info("BashGuard ALLOWLIST bypass: %r", command[:120])
+        return GuardResult(
+            approved=True,
+            reason=f"Command is in the allowlist and bypasses all safety checks.",
+            command=command,
+        )
+
     # 1. Rule layer — fast path reject
     rule_reason = _rule_check(command)
     if rule_reason:

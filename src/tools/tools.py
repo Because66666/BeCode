@@ -223,7 +223,7 @@ def bash_exec(command: str, timeout_seconds: int = 60) -> str:
     guard_result = check_command(command, user_requirement=_USER_REQUIREMENT)
 
     # Build guard info line (shown first in tool output)
-    guard_info = f"🔒 安全审查: {guard_result.reason}"
+    guard_info = f"安全审查: {guard_result.reason}"
 
     if not guard_result.approved:
         return (
