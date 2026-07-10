@@ -42,6 +42,7 @@ dist/
 *.spec
 becode_venv/
 installer/
+build_installer.bat
 
 # ============================================
 # 安装程序依赖及输出
