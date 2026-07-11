@@ -26,20 +26,23 @@ class TestBuildCoderAgent:
 
 
 class TestCoderPrompt:
-    """Verify CODER_SYSTEM_PROMPT content."""
+    """Verify system prompt content (built dynamically, including MCP context)."""
 
     def test_prompt_contains_tool_list(self):
-        from src.agents.coder_agent import CODER_SYSTEM_PROMPT
-        assert "read_file" in CODER_SYSTEM_PROMPT
-        assert "edit_file" in CODER_SYSTEM_PROMPT
-        assert "bash_exec" in CODER_SYSTEM_PROMPT
-        assert "web_search" in CODER_SYSTEM_PROMPT
-        assert "web_fetch" in CODER_SYSTEM_PROMPT
+        from src.agents.coder_agent import _build_system_prompt
+        prompt = _build_system_prompt("")
+        assert "read_file" in prompt
+        assert "edit_file" in prompt
+        assert "bash_exec" in prompt
+        assert "web_search" in prompt
+        assert "web_fetch" in prompt
+        assert "list_mcp_servers" in prompt
 
     def test_prompt_contains_workflow(self):
-        from src.agents.coder_agent import CODER_SYSTEM_PROMPT
-        assert "FINAL REPORT" in CODER_SYSTEM_PROMPT
-        assert "Do NOT run destructive commands" in CODER_SYSTEM_PROMPT
+        from src.agents.coder_agent import _build_system_prompt
+        prompt = _build_system_prompt("")
+        assert "FINAL REPORT" in prompt
+        assert "Do NOT run destructive commands" in prompt
 
 
 class TestRunCoder:

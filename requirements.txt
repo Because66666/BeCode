@@ -9,3 +9,5 @@ requests>=2.31.0
 beautifulsoup4>=4.12.0
 # Terminal UI
 rich>=13.0.0
+# MCP (Model Context Protocol) SDK
+mcp>=2.0.0b1
