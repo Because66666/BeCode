@@ -35,7 +35,15 @@
   调用原始函数（通过 `_call(tool, *args)` 辅助函数）。
 - 环境变量 `BASH_GUARD_LLM_DISABLED=1` 在测试中自动设置以跳过 LLM 安全审查层。
 - MCP Server 支持: `src/tools/mcp_manager.py`，支持 HTTP 和 Command 两种类型。
-- MCP 配置存储在 `~/.becode/mcp_servers.json`，支持两种格式（`servers`/`mcpServers`）。
+- MCP 配置文件: `~/.becode/mcp.json`（主），`~/.becode/mcp_servers.json`（兼容旧版）。
+  同时会加载项目根目录 `mcp.json` 并与之合并（项目配置优先级更高）。
+- 首次运行时静默创建 `~/.becode/.env` 和 `~/.becode/mcp.json`（即 `ensure_config()` 不再弹出交互式提示）。
 - MCP 工具在 `build_coder_agent()` 时动态发现，包装为 `StructuredTool` 注入 Agent。
 - `list_mcp_servers` 工具让 Agent 可见所有已配置的 MCP 服务器及其工具。
+- HTTP 类型的 MCP 服务器支持 `headers` 配置项，支持 `${ENV_VAR}` 环境变量替换。
+  GitHub MCP 使用 `Authorization: Bearer ${GITHUB_TOKEN}` 进行认证。
+- TokenTracker 改为按 agent（coder/reviewer）分开统计，支持 snapshot/restore
+  机制避免重试时的重复计数。Orchestrator 在每次 agent 尝试前调用
+  `snapshot()`，失败后调用 `restore()` 回滚。
+- `console.final_result()` 展示按 agent 拆分的 token 统计（coder/reviewer/合计）。
 - KeyboardInterrupt 三层防御: (1) `run_interactive()` 内部捕获 → 返回 `interrupted=True`; (2) `interactive_mode()` 内部循环和 while 外围各有一个 except; (3) `main()` 顶层兜底。所有入口统一用 `show_interrupt_message()` 显示「用户已取消任务」，不渲染 traceback。

@@ -42,7 +42,8 @@ On first run, a default ``~/.becode/mcp.json`` is created silently.
 ╔══════════════════════════════════════════════════╗
 ║  Learned Workspace Facts                        ║
 ║  - MCP SDK v2 (mcp==2.0.0b1) 用于客户端连接。   ║
-║  - HTTP 类型使用 Client(url) 直接连接。          ║
+║  - HTTP 类型支持 headers 配置项和 \$ 环境变量   ║
+║    替换（如 Authorization: Bearer \${GITHUB_TOKEN}）。║
 ║  - Command 类型使用 stdio_client() 连接。        ║
 ║  - MCP 工具包装为 LangChain StructuredTool。     ║
 ║  - 配置文件: ~/.becode/mcp.json (主) /           ║
