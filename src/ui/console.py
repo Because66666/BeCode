@@ -535,7 +535,10 @@ class AgentConsole:
 
     def final_result(self, success: bool, coder_report: str, review_verdict: str,
                      total_turns: int, session_id: str):
-        """Display the final workflow result (compact stats with token usage)."""
+        """Display the final workflow result (compact stats with token usage).
+
+        Shows per-agent (coder / reviewer) breakdown as well as totals.
+        """
         from rich.text import Text as RichText
         from src.core.token_tracker import get_token_tracker
 
@@ -544,11 +547,7 @@ class AgentConsole:
         status_text = "成功" if success else "未完成"
         status_color = "green" if success else "yellow"
 
-        # ── Token usage formatting ───────────────────────────────────
-        inp_tok = tracker.total_input_tokens
-        out_tok = tracker.total_output_tokens
-        total_tok = inp_tok + out_tok
-
+        # ── Token usage helper ───────────────────────────────────────
         def _fmt(n: int) -> str:
             if n >= 1_000_000:
                 return f"{n / 1_000_000:.1f}M"
@@ -556,10 +555,30 @@ class AgentConsole:
                 return f"{n / 1_000:.1f}K"
             return str(n)
 
-        token_str = (
-            f"[bold]输入Tokens:[/] [cyan]{_fmt(inp_tok)}[/]  │  "
-            f"[bold]输出Tokens:[/] [cyan]{_fmt(out_tok)}[/]  │  "
-            f"[bold]合计:[/] [cyan]{_fmt(total_tok)}[/]"
+        # ── Per-agent breakdown ─────────────────────────────────────
+        c_inp = tracker.coder_input
+        c_out = tracker.coder_output
+        r_inp = tracker.reviewer_input
+        r_out = tracker.reviewer_output
+
+        coder_token_str = (
+            f"[bold green]🤖 Coder[/]  [cyan]输入 {_fmt(c_inp)}[/]  │  "
+            f"[cyan]输出 {_fmt(c_out)}[/]  │  "
+            f"[bold cyan]合计 {_fmt(c_inp + c_out)}[/]"
+        )
+        reviewer_token_str = (
+            f"[bold magenta]🔍 Reviewer[/]  [cyan]输入 {_fmt(r_inp)}[/]  │  "
+            f"[cyan]输出 {_fmt(r_out)}[/]  │  "
+            f"[bold cyan]合计 {_fmt(r_inp + r_out)}[/]"
+        )
+
+        inp_tok = tracker.total_input_tokens
+        out_tok = tracker.total_output_tokens
+        total_tok = inp_tok + out_tok
+        total_token_str = (
+            f"[bold white]📊 合计[/]  [cyan]输入 {_fmt(inp_tok)}[/]  │  "
+            f"[cyan]输出 {_fmt(out_tok)}[/]  │  "
+            f"[bold yellow]合计 {_fmt(total_tok)}[/]"
         )
 
         # ── Compact statistics ───────────────────────────────────────
@@ -569,7 +588,9 @@ class AgentConsole:
             f"[bold]轮次:[/] [white]{total_turns}[/]  │  "
             f"[bold]会话ID:[/] [dim]{session_id}[/]  │  "
             f"[bold]Coder上下文:[/] [cyan]{coder_k_len}[/]\n"
-            f"{token_str}"
+            f"{coder_token_str}\n"
+            f"{reviewer_token_str}\n"
+            f"{total_token_str}"
         )
         self._console.print()
         self._console.print(

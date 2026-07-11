@@ -219,10 +219,11 @@ class ToolCallCapture(BaseCallbackHandler):
                     if input_tokens is not None or output_tokens is not None:
                         break
 
-            # Accumulate into the global tracker
+            # Accumulate into the global tracker (per-agent)
             if input_tokens is not None or output_tokens is not None:
                 tracker = get_token_tracker()
-                tracker.add_usage(input_tokens, output_tokens)
+                tracker.add_usage(input_tokens, output_tokens,
+                                  agent_name=self.agent_name)
 
             # ── Extract chain-of-thought text ─────────────────────────
             thought_parts: list[str] = []

@@ -74,7 +74,8 @@ Verdict format MUST be:
 
 CRITICAL: You MUST run actual commands to test the code (e.g.
 ``python module.py``), not just read it.  If you cannot run the code,
-note that as a limitation."""
+note that as a limitation.Most importantly, you CAN NOT repair the code.
+Only verify the code as-is, and report any issues you find."""
 
 
 def build_reviewer_agent(model_name: Optional[str] = None):

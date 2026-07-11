@@ -15,10 +15,15 @@ Format 1 (servers — HTTP focused):
         "url": "https://...",
         "headers": {
           "Authorization": "Bearer ${GITHUB_TOKEN}"
-        }
+        },
+        "mode": "auto"
       }
     }
   }
+
+``mode`` can be ``"auto"`` (negotiate latest protocol version),
+``"legacy"`` (use the legacy 2024-11-05 handshake), or a specific
+version string like ``"2026-07-28"``.  Defaults to ``"auto"``.
 
 Format 2 (mcpServers — command focused):
   {
@@ -42,8 +47,8 @@ On first run, a default ``~/.becode/mcp.json`` is created silently.
 ╔══════════════════════════════════════════════════╗
 ║  Learned Workspace Facts                        ║
 ║  - MCP SDK v2 (mcp==2.0.0b1) 用于客户端连接。   ║
-║  - HTTP 类型支持 headers 配置项和 \$ 环境变量   ║
-║    替换（如 Authorization: Bearer \${GITHUB_TOKEN}）。║
+║  - HTTP 类型支持 headers 配置项和 ${ENV_VAR} 环境变量   ║
+║    替换（如 Authorization: Bearer ${GITHUB_TOKEN}）。║
 ║  - Command 类型使用 stdio_client() 连接。        ║
 ║  - MCP 工具包装为 LangChain StructuredTool。     ║
 ║  - 配置文件: ~/.becode/mcp.json (主) /           ║
@@ -68,6 +73,47 @@ from typing import Any, Optional
 from langchain_core.tools import StructuredTool
 
 logger = logging.getLogger(__name__)
+
+
+# ── V2026 protocol compatibility patch ─────────────────────────────────────
+
+def _patch_v2026_list_tools_result() -> None:
+    """Patch ``mcp_types.v2026_07_28.ListToolsResult`` to make fields that
+    some servers (e.g. GitHub Copilot MCP) omit in their responses optional.
+
+    The v2026 ``ListToolsResult`` model requires ``resultType``, ``cacheScope``,
+    and ``ttlMs`` fields, but some MCP servers (notably GitHub Copilot) do not
+    include these in their ``tools/list`` response.  This patch adds defaults
+    so the Pydantic validation passes.
+
+    The patch is idempotent — subsequent calls are no-ops.
+    """
+    if getattr(_patch_v2026_list_tools_result, "_applied", False):
+        return
+
+    try:
+        from mcp_types import v2026_07_28 as v2026
+
+        ltr = v2026.ListToolsResult
+
+        # Set defaults on the required fields that some servers may omit
+        ltr.model_fields["result_type"].default = "complete"
+        ltr.model_fields["cache_scope"].default = "private"
+        ltr.model_fields["ttl_ms"].default = 0
+
+        # Rebuild the model so the compiled validator picks up the new defaults
+        ltr.model_rebuild(force=True)
+
+        _patch_v2026_list_tools_result._applied = True
+        logger.debug("Patched v2026 ListToolsResult for protocol compatibility")
+    except ImportError:
+        logger.debug("mcp_types.v2026_07_28 not available, skip patch")
+    except Exception as exc:
+        logger.warning("Failed to patch v2026 ListToolsResult: %s", exc)
+
+
+# Apply the patch at module import time
+_patch_v2026_list_tools_result()
 
 
 # ── Constants ──────────────────────────────────────────────────────────────
@@ -132,6 +178,17 @@ class MCPServerConfig:
                 val_str,
             )
         return {k: v for k, v in resolved.items() if v}
+
+    @property
+    def mode(self) -> str:
+        """Return the protocol version mode.
+
+        Reads from the ``mode`` key in the raw config.
+        Defaults to ``"auto"`` (negotiate latest version).
+        Can be set to a specific version string like ``"2024-11-05"``
+        for servers that don't fully support the latest protocol.
+        """
+        return self.raw.get("mode", "auto")
 
     def validate(self) -> str | None:
         """Return error message if invalid, or None."""
@@ -308,13 +365,17 @@ def _clear_mcp_config_cache() -> None:
 
 # ── MCP Client connection helpers ─────────────────────────────────────────
 
-async def _connect_http(url: str, headers: dict[str, str] | None = None) -> Any:
+async def _connect_http(url: str, headers: dict[str, str] | None = None,
+                         mode: str = "auto") -> Any:
     """Connect to an HTTP MCP server and return the Client.
 
     Args:
         url: The MCP server endpoint URL.
         headers: Optional HTTP headers to include in every request
             (e.g. ``{"Authorization": "Bearer <token>"}``).
+        mode: Protocol version mode. ``"auto"`` negotiates the latest
+            version.  A specific version string (e.g. ``"2024-11-05"``)
+            forces that version.  Defaults to ``"auto"``.
 
     Returns:
         An entered ``mcp.Client`` instance.
@@ -333,13 +394,14 @@ async def _connect_http(url: str, headers: dict[str, str] | None = None) -> Any:
         )
         transport = streamable_http_client(url, http_client=http_client)
         # Client accepts a Transport tuple directly
-        client = Client(transport)
+        client = Client(transport, mode=mode)
     else:
-        client = Client(url)
+        client = Client(url, mode=mode)
     return await client.__aenter__()
 
 
-async def _connect_command(command: str, args: list[str], env: dict[str, str]) -> Any:
+async def _connect_command(command: str, args: list[str], env: dict[str, str],
+                            mode: str = "auto") -> Any:
     """Connect to a command-based MCP server and return the Client."""
     from mcp import Client
     from mcp.client.stdio import stdio_client, StdioServerParameters
@@ -350,16 +412,26 @@ async def _connect_command(command: str, args: list[str], env: dict[str, str]) -
         env=env or None,
     )
     transport = stdio_client(params)
-    client = Client(transport)
+    client = Client(transport, mode=mode)
     return await client.__aenter__()
 
 
-async def _connect_server(config: MCPServerConfig) -> Any:
-    """Connect to an MCP server based on its config and return the Client."""
+async def _connect_server(config: MCPServerConfig, *,
+                          forced_mode: str | None = None) -> Any:
+    """Connect to an MCP server based on its config and return the Client.
+
+    Args:
+        config: The server configuration.
+        forced_mode: If set, overrides the config's mode setting.
+
+    Returns:
+        An entered ``mcp.Client`` instance.
+    """
+    mode = forced_mode if forced_mode is not None else config.mode
     if config.server_type == "http":
-        return await _connect_http(config.url, headers=config.headers)
+        return await _connect_http(config.url, headers=config.headers, mode=mode)
     elif config.server_type == "command":
-        return await _connect_command(config.command, config.args, config.env)
+        return await _connect_command(config.command, config.args, config.env, mode=mode)
     else:
         raise ValueError(f"Unsupported MCP server type: {config.server_type}")
 
@@ -380,13 +452,34 @@ def _sanitize_tool_name(name: str) -> str:
 async def _discover_tools(config: MCPServerConfig) -> list[dict[str, Any]]:
     """Connect to an MCP server and discover its tools.
 
+    If the initial connection fails due to a protocol version mismatch
+    (e.g. the server doesn't fully support the latest MCP protocol version),
+    automatically retries with an older protocol version (``"2024-11-05"``).
+
     Returns a list of tool dicts with keys: name, description, input_schema.
     The client is properly closed after discovery.
     """
     client = None
     try:
         client = await _connect_server(config)
-        result = await client.list_tools()
+        try:
+            result = await client.list_tools()
+        except Exception as exc:
+            # Check if this is a validation error related to protocol version
+            exc_str = str(exc)
+            if ("ListToolsResult" in exc_str and "resultType" in exc_str) or \
+               ("ValidationError" in exc_str and "resultType" in exc_str):
+                logger.warning(
+                    "Protocol version mismatch for [%s]: %s. Retrying with mode=legacy",
+                    config.name, exc,
+                )
+                # Close the current client and reconnect with legacy protocol version
+                await client.__aexit__(None, None, None)
+                client = None
+                client = await _connect_server(config, forced_mode="legacy")
+                result = await client.list_tools()
+            else:
+                raise
         tools = []
         for tool in result.tools:
             tools.append({
@@ -439,10 +532,22 @@ def _make_mcp_tool_fn(server_name: str, tool_info: dict[str, Any],
 
 async def _call_mcp_tool_async(config: MCPServerConfig, tool_name: str,
                                 arguments: dict[str, Any]) -> str:
-    """Connect to an MCP server, call a tool, and return the result as string."""
+    """Connect to an MCP server, call a tool, and return the result as string.
+
+    For HTTP servers using the v2026 protocol, this method calls ``list_tools()``
+    first to populate the session's ``_x_mcp_header_maps``, which are required
+    for the server to correctly route ``Mcp-Param-*`` headers.
+    """
     client = None
     try:
         client = await _connect_server(config)
+        # Call list_tools first to populate the session's header maps
+        # (required for v2026 `Mcp-Param-*` header mobility feature).
+        try:
+            await client.list_tools()
+        except Exception:
+            # If list_tools fails, we still try to call the tool anyway
+            pass
         result = await client.call_tool(tool_name, arguments)
         # Convert result to string
         if hasattr(result, "structured_content") and result.structured_content:

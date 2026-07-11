@@ -61,3 +61,6 @@
 - 当前每完成一次工作后，对当前工作进行简短总结，使用git工具进行提交。**不要使用git push**。
 - 具体的文件级工程记忆写入对应的文件头部注释，其余重要的记忆写入`## Learned Workspace Facts`部分。只写你认为以后用的上的，至于你具体实现了什么不必写。
 - MCP 配置文件的 headers 字段支持 `${ENV_VAR}` 语法引用环境变量，环境变量在运行时由 `os.environ` 解析。遇到需要凭据的 MCP 服务时，优先采用此机制避免硬编码。
+- GitHub Copilot MCP Server 使用 v2026 协议但 `tools/list` 响应缺少 `resultType`/`cacheScope`/`ttlMs` 字段。MCP manager 在模块导入时自动 patch `mcp_types.v2026_07_28.ListToolsResult` 使这些字段可选。
+- MCP server 配置文件支持 `mode` 字段（`"auto"`/`"legacy"`/特定版本字符串），默认为 `"auto"`。
+- `_call_mcp_tool_async` 在调用工具前会自动调用 `list_tools()` 以填充 session 的 `_x_mcp_header_maps`，确保 v2026 的 `Mcp-Param-*` header mobility 功能正常工作。

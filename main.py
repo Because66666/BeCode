@@ -28,6 +28,7 @@ from typing import Optional
 from src.core.config import settings, BECODE_HOME, SESSION_DIR, ensure_config, reload_settings
 from src.core.orchestrator import Orchestrator
 from src.core.session_store import SessionStore
+from src.tools.mcp_manager import get_mcp_config_path
 from src.tools.tools import set_workspace_root
 
 # ── Application metadata ───────────────────────────────────────────
@@ -232,7 +233,7 @@ def single_shot_mode(requirement: str, args: argparse.Namespace):
         result = orchestrator.run(requirement)
     except KeyboardInterrupt:
         console.show_interrupt_message(has_output=False)
-        console.print("[dim italic]用户已取消任务，程序将退出。[/]")
+        console.print("[dim italic]用户已取消任务，程序已退出。[/]")
         sys.exit(130)
 
     # ── Final output ────────────────────────────────────────────────
@@ -295,9 +296,12 @@ def main():
     # ── Ensure data directory exists ────────────────────────────────
     BECODE_HOME.mkdir(parents=True, exist_ok=True)
 
-    # ── First-run config check (interactive prompt if .env missing) ─
+    # ── First-run config check (silently creates .env if missing) ──
     ensure_config()
     reload_settings()  # Reload settings so newly created .env takes effect
+
+    # ── Ensure MCP config exists (silently creates mcp.json if missing) ─
+    get_mcp_config_path()  # Side effect: creates default mcp.json if needed
 
     # ── Override max iterations if provided ─────────────────────────
     if args.max_iterations is not None:

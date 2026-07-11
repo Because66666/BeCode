@@ -292,6 +292,10 @@ class Orchestrator:
             coder_report = None
             coder_last_exception: Optional[Exception] = None
 
+            # Snapshot token tracker before first attempt so we can roll
+            # back if the attempt fails (avoids double-counting).
+            get_token_tracker().snapshot("coder")
+
             for attempt in range(1, MAX_CODER_RETRIES + 2):  # 1..4
                 try:
                     coder_report = run_coder(
@@ -312,15 +316,19 @@ class Orchestrator:
                     )
 
                     if attempt <= MAX_CODER_RETRIES:
-                        # ── Retry: show warning, keep control with coder ──
+                        # ── Retry: roll back usage from failed attempt,
+                        #     show warning, keep control with coder ──
+                        get_token_tracker().restore("coder")
+                        # Re-snapshot before next attempt
+                        get_token_tracker().snapshot("coder")
+
                         console.print(
                             f"[bold yellow]⚠ Coder Agent 调用失败 "
                             f"(第 {attempt}/{MAX_CODER_RETRIES + 1} 次)"
                             f" — [{category.value}] {exc}[/]"
                         )
                         console.print(
-                            "[dim italic]   将在本回合内自动重试，"
-                            "不转移主动权给 Reviewer...[/]"
+                            "[dim italic]   将在本回合内自动重试...[/]"
                         )
                         # Build a fresh callback for the next attempt so
                         # tool calls from different attempts don't mix.
@@ -389,6 +397,9 @@ class Orchestrator:
             reviewer_callback = ToolCallCapture(agent_name="reviewer")
             review_verdict = None
 
+            # Snapshot token tracker before first attempt
+            get_token_tracker().snapshot("reviewer")
+
             for r_attempt in range(1, MAX_CODER_RETRIES + 2):  # 1..4
                 try:
                     review_verdict = run_reviewer(
@@ -404,6 +415,10 @@ class Orchestrator:
                         r_attempt, MAX_CODER_RETRIES + 1, exc,
                     )
                     if r_attempt <= MAX_CODER_RETRIES:
+                        # Roll back usage from failed attempt, re-snapshot
+                        get_token_tracker().restore("reviewer")
+                        get_token_tracker().snapshot("reviewer")
+
                         console.print(
                             f"[bold yellow]⚠ Reviewer Agent 调用失败 "
                             f"(第 {r_attempt}/{MAX_CODER_RETRIES + 1} 次)"
