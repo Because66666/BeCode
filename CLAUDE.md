@@ -40,5 +40,8 @@
 - 由于 `@tool` 装饰器返回 `StructuredTool` 对象，测试中使用 `tool.func()` 
   调用原始函数（通过 `_call(tool, *args)` 辅助函数）。
 - 环境变量 `BASH_GUARD_LLM_DISABLED=1` 在测试中自动设置以跳过 LLM 安全审查层。
+- 版本管理：版本号存储于项目根目录 `version` 文件（纯文本，仅版本字符串如 `1.0.0`）。
+  `build_installer.bat` 从中读取、递增后写回，并通过 `ISCC /dMyAppVersion=VERSION` 传入
+  `installer\becode_setup.iss`。.iss 脚本中不硬编码具体版本号（仅保留 `#ifndef` 占位 `0.0.0`）。
 
 
