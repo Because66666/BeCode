@@ -201,9 +201,8 @@ async def _connect_command(command: str, args: list[str], env: dict[str, str]) -
         args=args,
         env=env or None,
     )
-    transport = await stdio_client(params).__aenter__()
-    read_stream, write_stream = transport
-    client = Client(read_stream, write_stream)
+    transport = stdio_client(params)
+    client = Client(transport)
     return await client.__aenter__()
 
 
@@ -234,7 +233,7 @@ async def _discover_tools(config: MCPServerConfig) -> list[dict[str, Any]]:
             tools.append({
                 "name": tool.name,
                 "description": tool.description or "",
-                "input_schema": tool.inputSchema if hasattr(tool, "inputSchema") else {},
+                "input_schema": tool.input_schema,
             })
         return tools
     finally:
