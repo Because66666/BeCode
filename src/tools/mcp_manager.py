@@ -4,14 +4,18 @@ Supports two transport types:
   - HTTP (Streamable HTTP): Connect via URL.
   - Command (stdio): Spawn a subprocess and connect via stdio.
 
-Configuration is read from ``~/.becode/mcp_servers.json`` with two supported formats:
+Configuration is read from ``~/.becode/mcp.json`` (primary) with fallback to
+``~/.becode/mcp_servers.json`` (legacy).  Two supported formats:
 
 Format 1 (servers — HTTP focused):
   {
     "servers": {
       "server-name": {
         "type": "http",
-        "url": "https://..."
+        "url": "https://...",
+        "headers": {
+          "Authorization": "Bearer ${GITHUB_TOKEN}"
+        }
       }
     }
   }
@@ -29,13 +33,21 @@ Format 2 (mcpServers — command focused):
 
 Both formats can be combined in a single file.
 
+If a root project ``mcp.json`` exists (at the current working directory), it
+is also loaded and merged with the user-level config (project config takes
+precedence on conflict).
+
+On first run, a default ``~/.becode/mcp.json`` is created silently.
+
 ╔══════════════════════════════════════════════════╗
 ║  Learned Workspace Facts                        ║
 ║  - MCP SDK v2 (mcp==2.0.0b1) 用于客户端连接。   ║
 ║  - HTTP 类型使用 Client(url) 直接连接。          ║
 ║  - Command 类型使用 stdio_client() 连接。        ║
 ║  - MCP 工具包装为 LangChain StructuredTool。     ║
-║  - 配置存储在 ~/.becode/mcp_servers.json。       ║
+║  - 配置文件: ~/.becode/mcp.json (主) /           ║
+║    ~/.becode/mcp_servers.json (兼容旧版)。        ║
+║  - 同时会加载项目根目录 mcp.json 并合并。         ║
 ║  - list_mcp_servers 工具让 Agent 可见所有已      ║
 ║    配置的 MCP 服务器及其工具列表。               ║
 ╚══════════════════════════════════════════════════╝
@@ -47,6 +59,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -96,6 +109,29 @@ class MCPServerConfig:
     def env(self) -> dict[str, str]:
         return self.raw.get("env", {})
 
+    @property
+    def headers(self) -> dict[str, str]:
+        """Return custom HTTP headers for this server.
+
+        Reads from the ``headers`` key in the raw config.  Supports
+        ``${ENV_VAR}`` substitution inside any string value.
+        """
+        raw_headers = self.raw.get("headers", {})
+        if not isinstance(raw_headers, dict):
+            return {}
+        resolved: dict[str, str] = {}
+        for key, val in raw_headers.items():
+            if val is None:
+                continue
+            val_str = str(val)
+            # Replace all ${ENV_VAR} placeholders with environment variable values
+            resolved[key] = re.sub(
+                r"\$\{(\w+)\}",
+                lambda m: os.environ.get(m.group(1), ""),
+                val_str,
+            )
+        return {k: v for k, v in resolved.items() if v}
+
     def validate(self) -> str | None:
         """Return error message if invalid, or None."""
         if self.server_type == "http":
@@ -111,52 +147,97 @@ class MCPServerConfig:
         return None
 
 
+# ── Default MCP config template ────────────────────────────────────────────
+
+_DEFAULT_MCP_CONFIG = {
+    "mcpServers": {},
+    "_note": "在此处添加 MCP 服务器配置。格式参考: https://modelcontextprotocol.io"
+}
+
+
+def _ensure_default_mcp_config(config_dir: Path) -> Path:
+    """Silently create a default ``mcp.json`` if neither ``mcp.json`` nor
+    ``mcp_servers.json`` exists.
+
+    Returns the path to the config file to use (prefers ``mcp.json``).
+    """
+    mcp_json = config_dir / "mcp.json"
+    mcp_servers_json = config_dir / "mcp_servers.json"
+
+    if mcp_json.exists():
+        return mcp_json
+    if mcp_servers_json.exists():
+        # Legacy format exists — keep using it
+        return mcp_servers_json
+
+    # Neither exists — silently create mcp.json
+    mcp_json.write_text(json.dumps(_DEFAULT_MCP_CONFIG, ensure_ascii=False, indent=2))
+    return mcp_json
+
+
 # ── Config loading ─────────────────────────────────────────────────────────
 
 def get_mcp_config_path() -> Path:
     """Return the MCP config file path, ensuring the directory exists.
+
+    Returns the path to the primary config file (``mcp.json``), falling back
+    to legacy ``mcp_servers.json`` if only that exists.  Creates a default
+    ``mcp.json`` if neither exists.
 
     The path is resolved at call time (not import time) so that
     monkeypatching ``Path.home()`` in tests works correctly.
     """
     config_dir = Path.home() / ".becode"
     config_dir.mkdir(parents=True, exist_ok=True)
-    return config_dir / "mcp_servers.json"
+    return _ensure_default_mcp_config(config_dir)
 
 
-def load_mcp_config(force_reload: bool = False) -> dict[str, MCPServerConfig]:
-    """Load all MCP server configurations from the config file.
-
-    Args:
-        force_reload: If True, reload from disk instead of using cache.
-
-    Returns:
-        A dict of {server_name: MCPServerConfig}, or an empty dict if the
-        config file doesn't exist or contains no valid servers.
-    """
-    global _MCP_CONFIG_CACHE
-
-    if not force_reload and _MCP_CONFIG_CACHE is not None:
-        return _MCP_CONFIG_CACHE
-
-    config_path = get_mcp_config_path()
-
-    if not config_path.exists():
-        logger.info("MCP config file not found: %s", config_path)
-        # Return a default empty config
-        _MCP_CONFIG_CACHE = {}
-        return {}
-
+def _load_json_file(filepath: Path) -> dict:
+    """Load and parse a JSON file, returning an empty dict on failure."""
     try:
-        raw = json.loads(config_path.read_text(encoding="utf-8"))
+        return json.loads(filepath.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
-        logger.warning("Failed to load MCP config: %s", exc)
-        _MCP_CONFIG_CACHE = {}
+        logger.warning("Failed to load MCP config %s: %s", filepath, exc)
         return {}
 
-    servers: dict[str, MCPServerConfig] = {}
 
-    # Format 1: {"servers": {"name": {"type": "http", "url": "..."}}}
+def _merge_mcp_raw(raw_from_user: dict, raw_from_root: dict) -> dict:
+    """Merge root project mcp.json into user config.
+
+    Project config takes precedence on key conflict within each section.
+    """
+    merged = dict(raw_from_user)
+    for key in ("servers", "mcpServers"):
+        user_section = merged.get(key, {})
+        root_section = raw_from_root.get(key, {})
+        if isinstance(user_section, dict) and isinstance(root_section, dict):
+            # Merge: root project servers take precedence
+            combined = dict(root_section)
+            combined.update(user_section)
+            merged[key] = combined
+        elif isinstance(root_section, dict) and not isinstance(user_section, dict):
+            merged[key] = root_section
+    return merged
+
+
+def _get_root_mcp_config() -> dict:
+    """Try to load ``mcp.json`` from the current working directory.
+
+    Returns an empty dict if not found.
+    """
+    root_mcp = Path.cwd() / "mcp.json"
+    if root_mcp.exists():
+        logger.info("Found root project mcp.json: %s", root_mcp)
+        return _load_json_file(root_mcp)
+    return {}
+
+
+def _parse_servers_from_raw(raw: dict) -> dict[str, MCPServerConfig]:
+    """Parse server configurations from a raw JSON dict.
+
+    Supports both ``servers`` and ``mcpServers`` keys.
+    """
+    servers: dict[str, MCPServerConfig] = {}
     for key in ("servers", "mcpServers"):
         section = raw.get(key, {})
         if not isinstance(section, dict):
@@ -170,6 +251,48 @@ def load_mcp_config(force_reload: bool = False) -> dict[str, MCPServerConfig]:
                 logger.warning("Skipping MCP server config: %s", err)
                 continue
             servers[name] = server_cfg
+    return servers
+
+
+def load_mcp_config(force_reload: bool = False) -> dict[str, MCPServerConfig]:
+    """Load all MCP server configurations from the config file(s).
+
+    Load order:
+      1. User-level config from ``~/.becode/mcp.json`` (or legacy
+         ``~/.becode/mcp_servers.json``).
+      2. Project-level config from root ``mcp.json`` (if exists).
+      3. Merge: project servers take precedence on name conflict.
+
+    Args:
+        force_reload: If True, reload from disk instead of using cache.
+
+    Returns:
+        A dict of {server_name: MCPServerConfig}, or an empty dict if no
+        valid servers are configured.
+    """
+    global _MCP_CONFIG_CACHE
+
+    if not force_reload and _MCP_CONFIG_CACHE is not None:
+        return _MCP_CONFIG_CACHE
+
+    config_path = get_mcp_config_path()
+
+    if not config_path.exists():
+        logger.info("MCP config file not found: %s", config_path)
+        _MCP_CONFIG_CACHE = {}
+        return {}
+
+    # ── Load user-level config ──────────────────────────────────────────
+    raw_user = _load_json_file(config_path)
+
+    # ── Load & merge root project mcp.json ──────────────────────────────
+    raw_root = _get_root_mcp_config()
+    if raw_root:
+        raw_merged = _merge_mcp_raw(raw_user, raw_root)
+    else:
+        raw_merged = raw_user
+
+    servers = _parse_servers_from_raw(raw_merged)
 
     _MCP_CONFIG_CACHE = servers
     logger.info("Loaded %d MCP server config(s): %s", len(servers), list(servers.keys()))
@@ -184,10 +307,34 @@ def _clear_mcp_config_cache() -> None:
 
 # ── MCP Client connection helpers ─────────────────────────────────────────
 
-async def _connect_http(url: str) -> Any:
-    """Connect to an HTTP MCP server and return the Client."""
+async def _connect_http(url: str, headers: dict[str, str] | None = None) -> Any:
+    """Connect to an HTTP MCP server and return the Client.
+
+    Args:
+        url: The MCP server endpoint URL.
+        headers: Optional HTTP headers to include in every request
+            (e.g. ``{"Authorization": "Bearer <token>"}``).
+
+    Returns:
+        An entered ``mcp.Client`` instance.
+    """
     from mcp import Client
-    client = Client(url)
+    from mcp.client.streamable_http import streamable_http_client
+
+    if headers:
+        # Create a custom httpx client with the extra headers, then pass it
+        # to streamable_http_client so every HTTP request carries them.
+        import httpx
+
+        http_client = httpx.AsyncClient(
+            headers=headers,
+            follow_redirects=True,
+        )
+        transport = streamable_http_client(url, http_client=http_client)
+        # Client accepts a Transport tuple directly
+        client = Client(transport)
+    else:
+        client = Client(url)
     return await client.__aenter__()
 
 
@@ -209,11 +356,22 @@ async def _connect_command(command: str, args: list[str], env: dict[str, str]) -
 async def _connect_server(config: MCPServerConfig) -> Any:
     """Connect to an MCP server based on its config and return the Client."""
     if config.server_type == "http":
-        return await _connect_http(config.url)
+        return await _connect_http(config.url, headers=config.headers)
     elif config.server_type == "command":
         return await _connect_command(config.command, config.args, config.env)
     else:
         raise ValueError(f"Unsupported MCP server type: {config.server_type}")
+
+
+# ── Tool name sanitization ─────────────────────────────────────────────────
+
+def _sanitize_tool_name(name: str) -> str:
+    """Sanitize a tool name to match ``^[a-zA-Z0-9_-]+$``.
+
+    Replaces any character that is not alphanumeric, underscore, or hyphen
+    with an underscore.
+    """
+    return re.sub(r"[^a-zA-Z0-9_-]", "_", name)
 
 
 # ── Tool discovery & wrapping ──────────────────────────────────────────────
@@ -272,8 +430,8 @@ def _make_mcp_tool_fn(server_name: str, tool_info: dict[str, Any],
             logger.exception("MCP tool [%s/%s] failed", server_name, tool_name)
             return f"❌ MCP 工具 [{server_name}/{tool_name}] 调用失败: {exc}"
 
-    # Set a meaningful name and docstring
-    tool_fn.__name__ = f"mcp_{server_name}_{tool_name}"
+    # Set a meaningful name and docstring (sanitized for LLM API compliance)
+    tool_fn.__name__ = _sanitize_tool_name(f"mcp_{server_name}_{tool_name}")
     tool_fn.__doc__ = tool_info.get("description") or f"MCP tool: {server_name}/{tool_name}"
     return tool_fn
 
@@ -350,10 +508,10 @@ def get_available_mcp_tools() -> list[StructuredTool]:
             # Create the wrapper function
             fn = _make_mcp_tool_fn(server_name, tool_info, config)
 
-            # Build a StructuredTool
+            # Build a StructuredTool (name sanitized for LLM API compliance)
             wrapped_tool = StructuredTool.from_function(
                 func=fn,
-                name=f"mcp_{server_name}_{tool_name}",
+                name=_sanitize_tool_name(f"mcp_{server_name}_{tool_name}"),
                 description=(
                     f"[MCP] [{server_name}] {description}\n\n"
                     f"服务器: {server_name}\n"
@@ -381,6 +539,9 @@ def format_mcp_context() -> str:
     for server_name, config in servers.items():
         if config.server_type == "http":
             conn_info = f"🔗 {config.url}"
+            if config.headers:
+                masked = {k: "***" for k in config.headers}
+                conn_info += f"  |  headers: {json.dumps(masked, ensure_ascii=False)}"
         else:
             conn_info = f"💻 {config.command} {' '.join(config.args)}"
 
@@ -423,7 +584,7 @@ def _list_mcp_servers_fn() -> str:
     """
     servers = load_mcp_config()
     if not servers:
-        return "当前未配置任何 MCP 服务器。请编辑配置文件 `~/.becode/mcp_servers.json` 添加 MCP 服务器。\n\n支持的格式：\n```json\n{\n  \"servers\": {\n    \"server-name\": {\n      \"type\": \"http\",\n      \"url\": \"https://...\"\n    }\n  }\n}\n```\n或\n```json\n{\n  \"mcpServers\": {\n    \"server-name\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"package\"],\n      \"env\": {}\n    }\n  }\n}\n```"
+        return "当前未配置任何 MCP 服务器。请编辑配置文件 `~/.becode/mcp.json` 添加 MCP 服务器。\n\n支持的格式：\n```json\n{\n  \"servers\": {\n    \"server-name\": {\n      \"type\": \"http\",\n      \"url\": \"https://...\"\n    }\n  }\n}\n```\n或\n```json\n{\n  \"mcpServers\": {\n    \"server-name\": {\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"package\"],\n      \"env\": {}\n    }\n  }\n}\n```\n\n你也可以在项目根目录放置 `mcp.json` 文件，其中的配置会自动合并。"
 
     result = format_mcp_context()
     return result or "已配置的 MCP 服务器无可用工具。"
