@@ -47,3 +47,17 @@
   `snapshot()`，失败后调用 `restore()` 回滚。
 - `console.final_result()` 展示按 agent 拆分的 token 统计（coder/reviewer/合计）。
 - KeyboardInterrupt 三层防御: (1) `run_interactive()` 内部捕获 → 返回 `interrupted=True`; (2) `interactive_mode()` 内部循环和 while 外围各有一个 except; (3) `main()` 顶层兜底。所有入口统一用 `show_interrupt_message()` 显示「用户已取消任务」，不渲染 traceback。
+
+## Learned User Preferences
+
+- 默认使用中文回复；技术术语可按需保留英文。
+- 当你修复完bug后，一定要运行它，禁止修复完不检查不运行就交还给用户。
+- 进行 git commit 时，提交信息必须包含 `Made-with: Because66666`，并偏好按功能点分组、附结构化需求块（如 FR/NFR/AC）。
+- **Plan 与 git commit 信息严禁出现客户信息**：不得在 plan 标题/正文、Plan-Id slug、commit subject/body 中写入客户名称、客户代号、客户目录路径或可识别标识；一律用「Enterprise 交付」「客户项目」「外部招标文档本地目录」等中性表述；Plan 文件名也不得嵌入客户 slug。
+- 当用户需要你查找代码失败的原因/解决某一个bug的时候，通过调用各种工具，必须拿出代码级证据定位错误原因。
+- 用户对容错性有较高要求：LLM 调用或工具调用失败时不应直接中断，
+  应重试多次后再决定是否退出；JSON 解析错误应归入工具调用错误类别。
+- Agnet 工作流的设计模式：Coder Agent（实现）→ Reviewer Agent（审查）→ 反馈循环，每轮落盘持久化。
+- 当前每完成一次工作后，对当前工作进行简短总结，使用git工具进行提交。**不要使用git push**。
+- 具体的文件级工程记忆写入对应的文件头部注释，其余重要的记忆写入`## Learned Workspace Facts`部分。只写你认为以后用的上的，至于你具体实现了什么不必写。
+- MCP 配置文件的 headers 字段支持 `${ENV_VAR}` 语法引用环境变量，环境变量在运行时由 `os.environ` 解析。遇到需要凭据的 MCP 服务时，优先采用此机制避免硬编码。
