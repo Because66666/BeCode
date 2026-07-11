@@ -267,7 +267,7 @@ class AgentConsole:
             self._console.print(
                 Panel(
                     Text.from_markup(
-                        "[italic dim]⌨️ 用户中断 — 当前输出已保留，可继续输入新需求[/]"
+                        "[italic dim]⌨️ 用户已取消任务 — 当前输出已保留，可继续输入新需求[/]"
                     ),
                     box=box.SIMPLE,
                     border_style="yellow",
@@ -279,7 +279,7 @@ class AgentConsole:
             self._console.print(
                 Panel(
                     Text.from_markup(
-                        "[italic dim]⌨️ 用户中断 — 返回输入状态[/]"
+                        "[italic dim]⌨️ 用户已取消任务 — 返回输入状态[/]"
                     ),
                     box=box.SIMPLE,
                     border_style="yellow",

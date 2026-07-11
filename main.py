@@ -88,111 +88,118 @@ def interactive_mode(orchestrator: Orchestrator, model_name: Optional[str] = Non
         "[bold italic cyan]🤖 交互式对话模式[/] — 输入任务需求开始，输入 [bold].exit[/] 退出\n"
     )
 
-    while True:
-        _ctrl_c_pressed = False
+    try:
+        while True:
+            _ctrl_c_pressed = False
 
-        # ── Step 1: Get user input ──────────────────────────────────
-        try:
-            user_input = console.interactive_prompt(
-                "请输入任务需求 (输入 .exit 退出):",
-                prefill=last_user_input if should_prefill else "",
-            )
-            should_prefill = False  # Reset after successful input
-        except KeyboardInterrupt:
-            # Ctrl+C during input: loop back with pre-fill on next round
-            should_prefill = True
-            console.show_interrupt_message(has_output=False)
-            continue
-
-        if not user_input:
-            console.print("[dim]空输入，请重新输入。[/]")
-            should_prefill = True
-            continue
-
-        if user_input == ".exit":
-            console.print("[dim]👋 退出交互模式。[/]")
-            break
-
-        last_user_input = user_input
-
-        # ── Step 2: Run orchestrator ────────────────────────────────
-        console.print()
-        console.print("[bold]━━━ 开始执行任务 ━━━[/]")
-        console.print()
-
-        result: Optional[dict] = None
-        try:
-            result = orchestrator.run_interactive(
-                requirement=user_input,
-                summary_context=summary_context,
-            )
-        except KeyboardInterrupt:
-            # Ctrl+C during agent execution — orchestrator.run_interactive already
-            # caught it and returned via result dict, but if it propagated here
-            # (before entering run_interactive), handle it.
-            console.show_interrupt_message(has_output=False)
-            should_prefill = True
-            console.print("[dim italic]无输出结果，返回输入状态。[/]")
-            continue
-
-        except Exception as exc:
-            console.error(f"执行异常: {exc}")
-            should_prefill = True
-            continue
-
-        # Result is now guaranteed to be a dict (orchestrator.run_interactive
-        # always returns a dict, even on KeyboardInterrupt)
-        assert result is not None
-
-        # Check interrupt state from orchestrator result
-        interrupted = result.get("interrupted", False)
-        has_formal_output = result.get("has_formal_output", False)
-
-        if interrupted:
-            console.show_interrupt_message(has_output=has_formal_output)
-
-            if has_formal_output:
-                # Partial output exists — treat as context
-                summary_context.append(
-                    f"（被中断）任务: {user_input[:50]}..."
+            # ── Step 1: Get user input ──────────────────────────────────
+            try:
+                user_input = console.interactive_prompt(
+                    "请输入任务需求 (输入 .exit 退出):",
+                    prefill=last_user_input if should_prefill else "",
                 )
-                console.print(
-                    "[dim italic]部分结果已保留到上下文中，可继续输入新需求。[/]"
-                )
-            else:
-                # No formal output — go back to input with pre-fill
+                should_prefill = False  # Reset after successful input
+            except KeyboardInterrupt:
+                # Ctrl+C during input: loop back with pre-fill on next round
                 should_prefill = True
-                console.print(
-                    "[dim italic]无输出结果，返回输入状态。[/]"
+                console.show_interrupt_message(has_output=False)
+                continue
+
+            if not user_input:
+                console.print("[dim]空输入，请重新输入。[/]")
+                should_prefill = True
+                continue
+
+            if user_input == ".exit":
+                console.print("[dim]👋 退出交互模式。[/]")
+                break
+
+            last_user_input = user_input
+
+            # ── Step 2: Run orchestrator ────────────────────────────────
+            console.print()
+            console.print("[bold]━━━ 开始执行任务 ━━━[/]")
+            console.print()
+
+            result: Optional[dict] = None
+            try:
+                result = orchestrator.run_interactive(
+                    requirement=user_input,
+                    summary_context=summary_context,
                 )
-            continue  # Don't display stats/summary for interrupted runs
+            except KeyboardInterrupt:
+                # Ctrl+C during agent execution — orchestrator.run_interactive already
+                # caught it and returned via result dict, but if it propagated here
+                # (before entering run_interactive), handle it.
+                console.show_interrupt_message(has_output=False)
+                should_prefill = True
+                console.print("[dim italic]无输出结果，返回输入状态。[/]")
+                continue
 
-        previous_result = result
+            except Exception as exc:
+                console.error(f"执行异常: {exc}")
+                should_prefill = True
+                continue
 
-        # ── Step 3: Display final stats ─────────────────────────────
-        last_coder = result.get("coder_reports", ["(无)"])[-1]
-        last_review = result.get("review_verdicts", ["(无)"])[-1]
-        console.final_result(
-            success=result.get("success", False),
-            coder_report=last_coder,
-            review_verdict=last_review,
-            total_turns=result.get("total_turns", 0),
-            session_id=result.get("session_id", ""),
-        )
+            # Result is now guaranteed to be a dict (orchestrator.run_interactive
+            # always returns a dict, even on KeyboardInterrupt)
+            assert result is not None
 
-        # ── Step 4: Generate and display one-line summary ──────────
-        one_line = result.get("one_line_summary", "")
-        if one_line:
-            console.show_summary(one_line)
-            summary_context.append(one_line)
+            # Check interrupt state from orchestrator result
+            interrupted = result.get("interrupted", False)
+            has_formal_output = result.get("has_formal_output", False)
 
-        # Keep the last 20 summaries to avoid context bloat
-        if len(summary_context) > 20:
-            summary_context = summary_context[-20:]
+            if interrupted:
+                console.show_interrupt_message(has_output=has_formal_output)
 
-        # Print session file path for reference
-        session_file = SESSION_DIR / f'session_{result["session_id"]}.json'
-        console.print(f"[dim]📁 会话文件: {session_file}[/]")
+                if has_formal_output:
+                    # Partial output exists — treat as context
+                    summary_context.append(
+                        f"（被中断）任务: {user_input[:50]}..."
+                    )
+                    console.print(
+                        "[dim italic]部分结果已保留到上下文中，可继续输入新需求。[/]"
+                    )
+                else:
+                    # No formal output — go back to input with pre-fill
+                    should_prefill = True
+                    console.print(
+                        "[dim italic]无输出结果，返回输入状态。[/]"
+                    )
+                continue  # Don't display stats/summary for interrupted runs
+
+            previous_result = result
+
+            # ── Step 3: Display final stats ─────────────────────────────
+            last_coder = result.get("coder_reports", ["(无)"])[-1]
+            last_review = result.get("review_verdicts", ["(无)"])[-1]
+            console.final_result(
+                success=result.get("success", False),
+                coder_report=last_coder,
+                review_verdict=last_review,
+                total_turns=result.get("total_turns", 0),
+                session_id=result.get("session_id", ""),
+            )
+
+            # ── Step 4: Generate and display one-line summary ──────────
+            one_line = result.get("one_line_summary", "")
+            if one_line:
+                console.show_summary(one_line)
+                summary_context.append(one_line)
+
+            # Keep the last 20 summaries to avoid context bloat
+            if len(summary_context) > 20:
+                summary_context = summary_context[-20:]
+
+            # Print session file path for reference
+            session_file = SESSION_DIR / f'session_{result["session_id"]}.json'
+            console.print(f"[dim]📁 会话文件: {session_file}[/]")
+    except KeyboardInterrupt:
+        # Top-level catch: any KeyboardInterrupt that escapes inner handlers
+        # (e.g., happens between try blocks during printing/output) is caught
+        # here and shown as a clean message instead of a raw traceback.
+        console.show_interrupt_message(has_output=False)
+        console.print("[dim italic]用户已取消任务，返回输入状态。[/]")
 
     # ── Final message ───────────────────────────────────────────────
     console.print()
@@ -221,7 +228,12 @@ def single_shot_mode(requirement: str, args: argparse.Namespace):
     console.show_requirement(requirement)
 
     # ── Run ─────────────────────────────────────────────────────────
-    result = orchestrator.run(requirement)
+    try:
+        result = orchestrator.run(requirement)
+    except KeyboardInterrupt:
+        console.show_interrupt_message(has_output=False)
+        console.print("[dim italic]用户已取消任务，程序将退出。[/]")
+        sys.exit(130)
 
     # ── Final output ────────────────────────────────────────────────
     last_coder = result["coder_reports"][-1] if result["coder_reports"] else "(无)"
@@ -310,11 +322,25 @@ def main():
 
         session = SessionStore()
         orchestrator = Orchestrator(session=session, model_name=args.model)
-        interactive_mode(orchestrator, model_name=args.model)
+        try:
+            interactive_mode(orchestrator, model_name=args.model)
+        except KeyboardInterrupt:
+            from src.ui.console import get_console
+            console = get_console()
+            console.show_interrupt_message(has_output=False)
+            console.print("[dim]👋 用户已取消任务，程序退出。[/]")
+            sys.exit(130)
         return  # Never reached
 
     # ── Single-shot mode ────────────────────────────────────────────
-    single_shot_mode(requirement, args)
+    try:
+        single_shot_mode(requirement, args)
+    except KeyboardInterrupt:
+        from src.ui.console import get_console
+        console = get_console()
+        console.show_interrupt_message(has_output=False)
+        console.print("[dim]👋 用户已取消任务，程序退出。[/]")
+        sys.exit(130)
 
 
 if __name__ == "__main__":
