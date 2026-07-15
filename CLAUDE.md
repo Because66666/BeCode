@@ -52,3 +52,9 @@
   压缩后构建 Part A（压缩摘要）+ Part B（最近 N 轮原始对话）+ Part C（卡点/待办）注入 Coder。
   通过 `ProgressCallback` 报告实时进度，Token 计入 compressor agent 统计。
 - SessionStore 自动记录 `compression_events`（压缩前/后字符数、压缩率）和 `token_usage`（每 agent 用量）到 session JSON。
+- 平台提示词系统: `src/tools/prompt_platform_<os>.md` 文件存放各平台 bash 调用规则。
+  `load_platform_prompt()` 在模块加载时自动检测当前系统（`platform.system()`），
+  读取对应 `.md` 文件并追加到 `bash_exec.description` 尾部，使 LLM 能感知平台差异。
+  目前支持: darwin → `prompt_platform_darwin.md`, windows → `prompt_platform_windows.md`。
+  不支持平台返回空字符串，不影响原有功能。
+  `_PLATFORM_PROMPT` 模块级常量缓存加载结果，避免重复 IO。

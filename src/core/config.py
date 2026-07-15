@@ -48,6 +48,9 @@ OPENAI_MODEL=gpt-4o
 # Agent Workflow
 MAX_ITERATIONS=10
 
+# Context Compression (Token 数)
+MAX_CONTEXT_LENGTH=1000000
+
 # GitHub Token (用于 GitHub MCP 服务器认证)
 # 生成方式: https://github.com/settings/tokens (需要 copilot 权限)
 # 或通过 `gh auth token` 获取
@@ -90,6 +93,12 @@ class Settings(BaseSettings):
 
     # GitHub (for MCP authentication, consumed via os.environ)
     github_token: str = ""
+
+    # Context Compression
+    max_context_length: int = 1000000  # 最大上下文窗口（Token 数）
+    context_margin_ratio: float = 0.95  # 安全余量比例（触发压缩阈值）
+    compression_chunk_max_tokens: int = 50000  # Map 阶段每个 Chunk 的最大 Token 数
+    compression_recent_rounds: int = 5  # Part B 保留的最近完整轮次数
 
     # Log Level (only WARNING and above shown on console)
     log_level: str = "WARNING"

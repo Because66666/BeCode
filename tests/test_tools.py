@@ -1,5 +1,6 @@
 """Tests for src.tools.tools — read_file, edit_file, bash_exec, load_context_files."""
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -9,9 +10,11 @@ from src.tools.tools import (
     edit_file,
     bash_exec,
     load_context_files,
+    load_platform_prompt,
     set_workspace_root,
     set_user_requirement,
     _apply_output_limit,
+    _PLATFORM_PROMPT,
     MAX_TOOL_OUTPUT_LENGTH,
 )
 
@@ -188,3 +191,36 @@ class TestApplyOutputLimit:
 
     def test_empty_string_passes_through(self):
         assert _apply_output_limit("") == ""
+
+
+class TestPlatformPrompt:
+    """Verify platform auto-detection and prompt injection into bash_exec."""
+
+    def test_load_platform_prompt_returns_string(self):
+        """load_platform_prompt() should return a non-empty string on
+        supported platforms (Windows/darwin), or an empty string on others."""
+        prompt = load_platform_prompt()
+        if sys.platform == "win32":
+            assert "Windows" in prompt
+        elif sys.platform == "darwin":
+            assert "macOS" in prompt or "darwin" in prompt
+        else:
+            assert prompt == ""
+
+    def test_platform_prompt_in_bash_exec_description(self):
+        """bash_exec.description should contain platform-specific content
+        on supported platforms."""
+        desc = bash_exec.description
+        if sys.platform == "win32":
+            assert "Windows" in desc
+            assert "%USERPROFILE%" in desc
+        elif sys.platform == "darwin":
+            assert "macOS" in desc or "darwin" in desc
+            assert "$HOME" in desc
+        else:
+            # On unsupported platforms, description should remain unchanged
+            assert "Execute a bash command" in desc
+
+    def test_platform_prompt_constant_is_loaded(self):
+        """_PLATFORM_PROMPT global should be a string (possibly empty)."""
+        assert isinstance(_PLATFORM_PROMPT, str)

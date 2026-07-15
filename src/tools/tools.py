@@ -28,6 +28,8 @@ Three tools:
 """
 
 import logging
+import os
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -41,6 +43,45 @@ logger = logging.getLogger(__name__)
 
 _WORKSPACE_ROOT: Optional[Path] = None
 _USER_REQUIREMENT: str = ""
+
+
+# ── Platform auto-detection & prompt loading ────────────────────────────
+
+def load_platform_prompt() -> str:
+    """Auto-detect the current operating system and load the corresponding
+    platform-specific bash prompt file (``prompt_platform_<os>.md``).
+
+    Returns:
+        The content of the platform prompt file as a formatted string,
+        or an empty string if no matching prompt file exists for the
+        current OS.
+    """
+    system = platform.system().lower()
+    platform_map = {
+        "darwin": "prompt_platform_darwin.md",
+        "windows": "prompt_platform_windows.md",
+    }
+
+    filename = platform_map.get(system)
+    if not filename:
+        logger.info("No platform prompt file configured for system: %s", system)
+        return ""
+
+    prompt_path = Path(__file__).parent / filename
+    if not prompt_path.exists():
+        logger.warning("Platform prompt file not found: %s", prompt_path)
+        return ""
+
+    try:
+        content = prompt_path.read_text(encoding="utf-8", errors="replace").strip()
+        logger.info("Loaded platform prompt from %s (%s)", filename, system)
+        return content
+    except Exception as e:
+        logger.warning("Failed to read platform prompt file %s: %s", prompt_path, e)
+        return ""
+
+
+_PLATFORM_PROMPT: str = load_platform_prompt()
 
 
 def set_workspace_root(path: str | Path):
@@ -126,7 +167,7 @@ def read_file(path: str, offset: Optional[int] = None, limit: Optional[int] = No
     """Read the content of a file from disk.
 
     Args:
-        path: Absolute or workspace-relative file path.
+        path: 工作区文件的相对路径，传入工作区外的路径会报错。
         offset: Optional line number to start from (1-indexed).
         limit: Optional max number of lines to read.
 
@@ -236,7 +277,7 @@ def bash_exec(command: str, timeout_seconds: int = 60) -> str:
 
     Args:
         command: The bash command string to execute.
-        timeout_seconds: Max execution time (default 60, max 300).
+        timeout_seconds: Max execution time (default 60, max 600).
 
     Returns:
         stdout + stderr of the command, or an error message.
@@ -255,7 +296,7 @@ def bash_exec(command: str, timeout_seconds: int = 60) -> str:
         )
 
     # 2. Execute
-    timeout = min(max(timeout_seconds, 1), 300)
+    timeout = min(max(timeout_seconds, 1), 600)
     try:
         result = subprocess.run(
             command,
@@ -284,3 +325,9 @@ def bash_exec(command: str, timeout_seconds: int = 60) -> str:
     retcode = result.returncode
     summary = f"exit code: {retcode}"
     return _apply_output_limit(f"{summary}\n{body}")
+
+
+# ── Inject platform prompt into bash_exec tool description ──────────────
+
+if _PLATFORM_PROMPT:
+    bash_exec.description = bash_exec.description + "\n\n" + _PLATFORM_PROMPT
