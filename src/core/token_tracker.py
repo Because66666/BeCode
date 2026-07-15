@@ -81,11 +81,14 @@ class TokenTracker:
     Supports snapshot/restore for retry loops: before each agent attempt,
     call ``snapshot(agent_name)``; if the attempt fails, call
     ``restore(agent_name)`` to roll back any usage from the failed attempt.
+
+    Three agents tracked: ``coder``, ``reviewer``, ``compressor``.
     """
 
     def __init__(self):
         self._coder = AgentUsage()
         self._reviewer = AgentUsage()
+        self._compressor = AgentUsage()
         self._snapshots: dict[str, AgentUsage] = {}
 
     def add_usage(self, input_tokens: Optional[int], output_tokens: Optional[int],
@@ -95,7 +98,7 @@ class TokenTracker:
         Args:
             input_tokens: Number of prompt tokens consumed, or None.
             output_tokens: Number of completion tokens generated, or None.
-            agent_name: Which agent ("coder" or "reviewer").
+            agent_name: Which agent ("coder", "reviewer", or "compressor").
         """
         agent = self._get_agent(agent_name)
         inp = input_tokens if input_tokens is not None else 0
@@ -139,20 +142,42 @@ class TokenTracker:
             "output_tokens": agent.total_output,
         }
 
+    def get_all_usage(self) -> dict:
+        """Get usage summary for all agents.
+
+        Returns:
+            dict with keys: coder, reviewer, compressor, total
+            Each value is a dict with input_tokens, output_tokens, total.
+        """
+        c_in = self._coder.total_input
+        c_out = self._coder.total_output
+        r_in = self._reviewer.total_input
+        r_out = self._reviewer.total_output
+        comp_in = self._compressor.total_input
+        comp_out = self._compressor.total_output
+
+        return {
+            "coder": {"input_tokens": c_in, "output_tokens": c_out, "total": c_in + c_out},
+            "reviewer": {"input_tokens": r_in, "output_tokens": r_out, "total": r_in + r_out},
+            "compressor": {"input_tokens": comp_in, "output_tokens": comp_out, "total": comp_in + comp_out},
+            "total": {"input_tokens": c_in + r_in + comp_in, "output_tokens": c_out + r_out + comp_out, "total": c_in + c_out + r_in + r_out + comp_in + comp_out},
+        }
+
     @property
     def total_input_tokens(self) -> int:
         """Total input tokens across all agents."""
-        return self._coder.total_input + self._reviewer.total_input
+        return self._coder.total_input + self._reviewer.total_input + self._compressor.total_input
 
     @property
     def total_output_tokens(self) -> int:
         """Total output tokens across all agents."""
-        return self._coder.total_output + self._reviewer.total_output
+        return self._coder.total_output + self._reviewer.total_output + self._compressor.total_output
 
     def reset(self):
         """Reset all counters to zero (called at start of each session)."""
         self._coder = AgentUsage()
         self._reviewer = AgentUsage()
+        self._compressor = AgentUsage()
         self._snapshots.clear()
 
     def _get_agent(self, name: str) -> AgentUsage:
@@ -160,6 +185,8 @@ class TokenTracker:
             return self._coder
         elif name == "reviewer":
             return self._reviewer
+        elif name == "compressor":
+            return self._compressor
         else:
             # Fallback to coder for unknown agent names
             return self._coder
@@ -179,6 +206,14 @@ class TokenTracker:
     @property
     def reviewer_output(self) -> int:
         return self._reviewer.total_output
+
+    @property
+    def compressor_input(self) -> int:
+        return self._compressor.total_input
+
+    @property
+    def compressor_output(self) -> int:
+        return self._compressor.total_output
 
 
 # ── Module-level singleton ────────────────────────────────────────────

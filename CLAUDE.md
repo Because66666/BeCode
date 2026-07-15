@@ -42,8 +42,13 @@
 - `list_mcp_servers` 工具让 Agent 可见所有已配置的 MCP 服务器及其工具。
 - HTTP 类型的 MCP 服务器支持 `headers` 配置项，支持 `${ENV_VAR}` 环境变量替换。
   GitHub MCP 使用 `Authorization: Bearer ${GITHUB_TOKEN}` 进行认证。
-- TokenTracker 改为按 agent（coder/reviewer）分开统计，支持 snapshot/restore
+- TokenTracker 改为按 agent（coder/reviewer/compressor）分开统计，支持 snapshot/restore
   机制避免重试时的重复计数。Orchestrator 在每次 agent 尝试前调用
-  `snapshot()`，失败后调用 `restore()` 回滚。
-- `console.final_result()` 展示按 agent 拆分的 token 统计（coder/reviewer/合计）。
+  `snapshot()`，失败后调用 `restore()` 回滚。新增 `get_all_usage()` 返回所有 agent 的汇总。
+- `console.final_result()` 展示按 agent 拆分的 token 统计（coder/reviewer/compressor/合计）。
 - KeyboardInterrupt 三层防御: (1) `run_interactive()` 内部捕获 → 返回 `interrupted=True`; (2) `interactive_mode()` 内部循环和 while 外围各有一个 except; (3) `main()` 顶层兜底。所有入口统一用 `show_interrupt_message()` 显示「用户已取消任务」，不渲染 traceback。
+- 上下文压缩系统: `src/core/context_compressor.py` 实现 Map-Reduce 策略。
+  `should_compress()` 每次迭代前检查是否触发压缩（阈值: max_context_length * (1 - margin_ratio)）。
+  压缩后构建 Part A（压缩摘要）+ Part B（最近 N 轮原始对话）+ Part C（卡点/待办）注入 Coder。
+  通过 `ProgressCallback` 报告实时进度，Token 计入 compressor agent 统计。
+- SessionStore 自动记录 `compression_events`（压缩前/后字符数、压缩率）和 `token_usage`（每 agent 用量）到 session JSON。
