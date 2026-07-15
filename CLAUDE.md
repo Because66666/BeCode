@@ -43,3 +43,6 @@
 - HTTP 类型的 MCP 服务器支持 `headers` 配置项，支持 `${ENV_VAR}` 环境变量替换。
   GitHub MCP 使用 `Authorization: Bearer ${GITHUB_TOKEN}` 进行认证。
 - `/CODE_MAP.md` 文件为代码地图，包含目录结构与代码文件的简要说明。
+- 打包配置: `becode.spec` 的 `datas` 列表包含 `prompt_platform_windows.md`、`prompt_platform_darwin.md` 和 `version` 文件。
+- 版本号从项目根目录 `version` 文件中读取（UTF-8），`main.py` 中 `APP_VERSION` 通过 `_read_version()` 函数动态获取。
+- `prompt_platform_*.md` 文件位于 `src/tools/`，通过 `load_platform_prompt()` 按当前 OS 自动加载。

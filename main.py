@@ -33,7 +33,25 @@ from src.tools.tools import set_workspace_root
 
 # ── Application metadata ───────────────────────────────────────────
 APP_NAME = "BeCode"
-APP_VERSION = "1.0.0"
+
+
+def _read_version() -> str:
+    """Read version from the ``version`` file at project root.
+
+    Falls back to ``1.0.0`` if the file is missing or unreadable.
+    The ``version`` file is included in PyInstaller ``datas`` so this
+    works both in development and in the packaged executable.
+    """
+    try:
+        vfile = Path(__file__).resolve().parent / "version"
+        if vfile.is_file():
+            return vfile.read_text(encoding="utf-8").strip()
+    except Exception:
+        pass
+    return "1.0.0"
+
+
+APP_VERSION = _read_version()
 
 # Only WARNING and above (ERROR, CRITICAL) are shown on console
 logging.basicConfig(
