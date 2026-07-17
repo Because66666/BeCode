@@ -71,6 +71,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field, create_model
 
 logger = logging.getLogger(__name__)
 
@@ -496,6 +497,100 @@ async def _discover_tools(config: MCPServerConfig) -> list[dict[str, Any]]:
                 pass
 
 
+# ── JSON Schema → Pydantic args_schema conversion ───────────────────────────
+
+_JSON_TYPE_MAP: dict[str, type] = {
+    "string": str,
+    "number": float,
+    "integer": int,
+    "boolean": bool,
+    "array": list,
+    "object": dict,
+    "null": type(None),
+}
+
+
+def _json_schema_type_to_python(js_type: str, schema: dict[str, Any]) -> type:
+    """Convert a JSON Schema type to a Python type.
+
+    Handles basic types and container types (array with items).
+    Falls back to ``str`` for unknown types.
+    """
+    if js_type == "array":
+        items = schema.get("items", {})
+        if isinstance(items, dict) and "type" in items:
+            item_type = _json_schema_type_to_python(items["type"], items)
+            return list[item_type]  # e.g. list[str]
+        return list
+    return _JSON_TYPE_MAP.get(js_type, str)
+
+
+def _create_args_schema(tool_info: dict[str, Any]) -> type[BaseModel] | None:
+    """Dynamically create a Pydantic model from an MCP tool's ``input_schema``.
+
+    Converts JSON Schema ``properties`` into Pydantic model fields so that
+    ``StructuredTool.from_function()`` has an explicit ``args_schema``.  This
+    is critical because without it, LangChain auto-generates a schema with a
+    single ``kwargs: dict`` field from the ``**kwargs`` function signature,
+    which causes the LLM's tool-call arguments to be silently dropped.
+
+    Returns:
+        A Pydantic model class, or ``None`` if the tool has no properties.
+    """
+    input_schema = tool_info.get("input_schema", {})
+    if not isinstance(input_schema, dict):
+        return None
+
+    properties = input_schema.get("properties", {})
+    if not isinstance(properties, dict) or not properties:
+        return None
+
+    required_list: list[str] = input_schema.get("required", [])
+    if not isinstance(required_list, list):
+        required_list = []
+
+    fields: dict[str, tuple[type, Any]] = {}
+    for param_name, param_schema in properties.items():
+        if not isinstance(param_schema, dict):
+            continue
+
+        js_type = param_schema.get("type", "string")
+        python_type = _json_schema_type_to_python(js_type, param_schema)
+
+        # Build a rich Field description that includes any JSON Schema
+        # metadata useful for the LLM (description, enum values, etc.)
+        desc_parts: list[str] = []
+        raw_desc = param_schema.get("description", "")
+        if raw_desc:
+            desc_parts.append(raw_desc)
+
+        enum_vals = param_schema.get("enum")
+        if enum_vals and isinstance(enum_vals, list):
+            desc_parts.append(f"可选值: {', '.join(str(v) for v in enum_vals)}")
+
+        field_description = " | ".join(desc_parts) if desc_parts else None
+
+        if param_name in required_list:
+            fields[param_name] = (python_type, Field(description=field_description))
+        else:
+            fields[param_name] = (
+                Optional[python_type],
+                Field(default=None, description=field_description),
+            )
+
+    if not fields:
+        return None
+
+    # Sanitize the model name to avoid Pydantic warnings
+    raw_name = tool_info.get("name", "tool")
+    model_name = re.sub(r"[^a-zA-Z0-9_]", "_", f"MCP_{raw_name}_args")
+    # Ensure it doesn't start with a digit
+    if model_name and model_name[0].isdigit():
+        model_name = f"Arg_{model_name}"
+
+    return create_model(model_name, **fields)
+
+
 def _make_mcp_tool_fn(server_name: str, tool_info: dict[str, Any],
                       config: MCPServerConfig) -> callable:
     """Create a synchronous wrapper function for an MCP tool call.
@@ -514,10 +609,13 @@ def _make_mcp_tool_fn(server_name: str, tool_info: dict[str, Any],
         Connects to the MCP server, calls the tool, returns the result.
         """
         try:
+            # Strip None values — the MCP server may reject them, and the
+            # Pydantic args_schema sets default=None for optional fields.
+            filtered = {k: v for k, v in kwargs.items() if v is not None}
             result = asyncio.run(_call_mcp_tool_async(
                 config=config,
                 tool_name=tool_name,
-                arguments=kwargs,
+                arguments=filtered,
             ))
             return result
         except Exception as exc:
@@ -604,12 +702,14 @@ def get_available_mcp_tools() -> list[StructuredTool]:
             tool_name = tool_info.get("name", "unknown")
             description = tool_info.get("description", "")
             input_schema = tool_info.get("input_schema", {})
+            properties = input_schema.get("properties", {}) if isinstance(input_schema, dict) else {}
 
-            # Build argument schema from the MCP tool's input schema
-            # Convert JSON Schema to a simple dict of {arg_name: type_hint}
-            schema = input_schema if isinstance(input_schema, dict) else {}
-            properties = schema.get("properties", {})
-            required = schema.get("required", [])
+            # Create a proper Pydantic args_schema from the tool's input_schema
+            # This is CRITICAL: without it, StructuredTool.from_function
+            # auto-generates a schema with a single ``kwargs: dict`` field
+            # from the ``**kwargs`` function signature, causing the LLM's
+            # tool-call arguments to be silently dropped at runtime.
+            args_schema = _create_args_schema(tool_info)
 
             # Create the wrapper function
             fn = _make_mcp_tool_fn(server_name, tool_info, config)
@@ -618,6 +718,7 @@ def get_available_mcp_tools() -> list[StructuredTool]:
             wrapped_tool = StructuredTool.from_function(
                 func=fn,
                 name=_sanitize_tool_name(f"mcp_{server_name}_{tool_name}"),
+                args_schema=args_schema,
                 description=(
                     f"[MCP] [{server_name}] {description}\n\n"
                     f"服务器: {server_name}\n"

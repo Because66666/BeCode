@@ -43,3 +43,8 @@
   当上下文达到 `max_context_length` 的 90%（硬编码阈值）时触发 Map-Reduce 压缩。
   压缩后 Coder Agent 上下文 = 用户原文 + 压缩摘要 + 最近三轮工具调用记录。
   压缩事件记录在 session 的 `compression_events` 列表中。
+- **MCP args_schema 关键修复**: `StructuredTool.from_function(func=fn)` 无 `args_schema`
+  参数时，对于 `**kwargs` 函数会生成仅含 `kwargs: dict` 的 schema，导致 LLM 传入
+  的参数被 LangChain 静默丢弃。`_create_args_schema()` 将 MCP 工具的 `input_schema.
+  properties` 转为 Pydantic model，确保参数正确传递。`_make_mcp_tool_fn()` 中还会
+  在调用前过滤掉值为 `None` 的参数，避免 MCP 服务器拒绝 `null` 值。
