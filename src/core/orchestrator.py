@@ -284,9 +284,19 @@ class Orchestrator:
             logger.info("=== Iteration %d / %d ===", iteration, self.max_iterations)
             console.start_iteration(iteration, self.max_iterations)
 
-            # ── Context Compression Check (before each Coder run) ────
-            # Build the current accumulated context and check if compression
-            # is needed to prevent token overflow.
+            # ── Context Compression Check (Compressor Agent entry) ────
+            # Before each Coder run, check whether the accumulated context has
+            # reached 90 % of max_context_length. If so, invoke the Compressor
+            # Agent to compress the session history.
+            #
+            # Compressor Agent flow:
+            #   1. Calculate accumulated context size
+            #   2. If >= 90 % threshold → trigger Map-Reduce compression
+            #   3. Build compressed context = user original + compressed summary
+            #      + last 3 rounds tool calls
+            #   4. Replace coder_requirement with compressed context
+            #   5. Session now has only user original + compressed summary
+            #      (old history removed from Coder's view)
             accumulated_context = build_coder_accumulated_context(
                 requirement=requirement,
                 feedback=feedback,
@@ -294,23 +304,29 @@ class Orchestrator:
                 history=self.session.history,
             )
             if should_compress(accumulated_context):
-                logger.info("Context compression triggered at iteration %d", iteration)
+                logger.info("[Compressor Agent] Context compression triggered at iteration %d", iteration)
                 console.compression_start()
 
-                # Run Map-Reduce compression on session history
+                # ── Phase 1: Estimate before size ─────────────────────
                 history = self.session.history
-                # Estimate before size
                 before_chars = sum(
                     len(str(e.get("content", ""))) for e in history
                 )
 
-                # Compress with progress callback
+                # ── Phase 2: Map-Reduce compression (Compressor Agent) ──
+                # The compressor runs independently: it reads the full session
+                # history, generates local summaries (Map), then merges them
+                # (Reduce) into one coherent compressed summary.
                 compressed_summary = compress_history(
                     history,
                     progress=console.compression_progress,
                 )
 
-                # Build compressed context (Part A + B + C)
+                # ── Phase 3: Build compressed context ──────────────────
+                # The Compressor Agent assembles the new context:
+                #   - 用户要求原文 (user requirement)
+                #   - 压缩后的内容 (compressed summary)
+                #   - 最近三轮工具调用及原始返回
                 compressed_context = build_compressed_context(
                     requirement=requirement,
                     history=history,
@@ -320,18 +336,20 @@ class Orchestrator:
                 # Estimate after size
                 after_chars = len(compressed_context)
 
-                # Record compression event
+                # ── Phase 4: Record compression event in session ──────
                 event = record_compression_event(
                     self.session, before_chars, after_chars
                 )
 
-                # Display compression result
+                # ── Phase 5: Display compression result ───────────────
                 console.compression_result(
                     before_chars, after_chars,
                     event["compression_ratio_pct"],
                 )
 
-                # Use compressed context as the new requirement for this round
+                # ── Phase 6: Set compressed context as new requirement ─
+                # The Coder Agent's context is now:
+                #   用户要求原文 + 压缩后的内容（无旧历史记录）
                 coder_requirement = compressed_context
             else:
                 coder_requirement = requirement

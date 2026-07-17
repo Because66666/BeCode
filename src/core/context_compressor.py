@@ -1,38 +1,47 @@
 """Context Compressor — Map-Reduce context compression for long-running sessions.
 
-This module provides a Compressor Agent that reduces accumulated conversation
-history into a concise summary across four dimensions:
-  1. Ultimate goal & dynamic constraints
-  2. Completed execution paths
-  3. Error history & immunity strategies
-  4. Current blockers & todo list (most critical)
+This module implements a **Compressor Agent** that runs independently from
+Coder/Reviewer agents. When the accumulated context reaches 90 % of the max
+context length, the Compressor Agent:
+
+  1. Analyzes the Coder agent's current session history
+  2. Generates a structured compressed summary across 5 dimensions:
+     a) 当前目标 (current goal)
+     b) 已完成的执行路径 (completed work)
+     c) 错误履历与免疫策略 (errors & how to avoid repeating them)
+     d) 当前执行进度 (current step)
+     e) 下一步候选计划 (next candidate plan)
+  3. Assembles the new context as:
+     - 用户要求原文 (original user request)
+     - 压缩后的内容 (compressed summary)
+     - 最近三轮工具调用及原始返回 (last 3 rounds tool calls + results)
 
 Map-Reduce strategy:
   - Map phase: Split history into chunks (≤ compression_chunk_max_tokens tokens
     per chunk), generate per-chunk local summaries.
   - Reduce phase: Merge all local summaries into one final global summary.
 
-Compression is triggered when the estimated context size reaches the configured
-threshold (max_context_length * (1 - context_margin_ratio) tokens remaining).
-
-The compressed output is structured as Part A (long-term summary) + Part B (last
-N rounds raw) + Part C (blocker/todo system prompt).
+Compression is triggered when estimated tokens >= max_context_length * 0.90
+(0.90 is **hardcoded**, not read from config).
 
 ╔══════════════════════════════════════════════════╗
 ║  Learned Workspace Facts                        ║
-║  - Estimated token count: len(text) / 2 (UTF-8  ║
-║    characters → approximate token count).        ║
-║  - Map-Reduce ensures each per-chunk LLM call    ║
-║    stays under compression_chunk_max_tokens.      ║
-║  - Progress callback reports (step, total) for    ║
-║    real-time UI updates during compression.       ║
-║  - Compressor agent's token usage is tracked via  ║
-║    TokenTracker (agent_name="compressor").        ║
+║  - 压缩阈值: 0.90 硬编码, 不从配置读取。         ║
+║  - Compressor Agent 独立运行, 不依赖              ║
+║    Coder/Reviewer Agent。                        ║
+║  - 压缩后新上下文 = 用户原文 + 压缩摘要           ║
+║    + 最近三轮工具调用及结果。                     ║
+║  - 每次压缩事件记录到 session 的                   ║
+║    compression_events 列表中。                    ║
+║  - Map-Reduce 确保每个 Chunk 的 LLM 调用           ║
+║    不超过 compression_chunk_max_tokens。           ║
+║  - Compressor Agent 的 token 用量通过              ║
+║    TokenTracker (agent_name="compressor") 追踪。   ║
 ╚══════════════════════════════════════════════════╝
 """
 
 import logging
-import math
+import re
 from typing import Any, Callable, Optional
 
 from src.core.config import settings
@@ -41,6 +50,12 @@ from src.core.token_tracker import get_token_tracker
 from langchain_core.messages import HumanMessage, SystemMessage
 
 logger = logging.getLogger(__name__)
+
+# ── Hardcoded Constants ─────────────────────────────────────────────────
+
+# 上下文压缩触发阈值（硬编码，不从配置文件读取）
+# 当上下文 Token 数达到 max_context_length 的 90% 时触发压缩。
+COMPRESSION_THRESHOLD_RATIO = 0.90
 
 # ── Token Estimation ─────────────────────────────────────────────────────
 
@@ -57,31 +72,25 @@ def estimate_tokens(text: str) -> int:
     return max(1, int(len(text) / _CHARS_PER_TOKEN))
 
 
-# ── Compression trigger ─────────────────────────────────────────────────
+# ── Compression trigger (Compressor Agent entry) ────────────────────────
 
 
 def should_compress(context_text: str) -> bool:
     """Check whether the given context text exceeds the compression threshold.
 
-    Trigger condition: estimated tokens + margin >= max_context_length
-    where margin = max_context_length * context_margin_ratio
+    Trigger condition (hardcoded 0.90):
+      estimated_tokens >= max_context_length * COMPRESSION_THRESHOLD_RATIO
 
-    i.e., compression triggers when estimated tokens >=
-    max_context_length * (1 - context_margin_ratio)
+    When triggered, the Compressor Agent will be invoked to compress the
+    accumulated history and free up context space for the Coder agent.
     """
     max_len = settings.max_context_length
-    margin_ratio = settings.context_margin_ratio
-
-    # Margin = max * margin_ratio (default: max * 0.95 = 950000)
-    # Trigger: current + margin >= max
-    #   → current >= max - margin
-    #   → current >= max * (1 - margin_ratio)
-    threshold = int(max_len * (1 - margin_ratio))
+    threshold = int(max_len * COMPRESSION_THRESHOLD_RATIO)
     estimated = estimate_tokens(context_text)
 
     logger.debug(
-        "Compression check: estimated=%d, margin_ratio=%.2f, threshold=%d",
-        estimated, margin_ratio, threshold,
+        "Compression check: estimated=%d, threshold=%.0f (max=%d * %.2f)",
+        estimated, threshold, max_len, COMPRESSION_THRESHOLD_RATIO,
     )
     return estimated >= threshold
 
@@ -94,16 +103,26 @@ ProgressCallback = Callable[[int, int, str], None]
 _NULL_CALLBACK: ProgressCallback = lambda step, total, msg: None
 
 
-# ── Map-Reduce Prompts ──────────────────────────────────────────────────
+# ── Map-Reduce Prompts (Compressor Agent) ──────────────────────────────
+#
+# The Compressor Agent uses these prompts to analyze what the Coder Agent
+# has done across 5 dimensions:
+#   1. Current goal
+#   2. Completed execution paths
+#   3. Error history & immunity strategies
+#   4. Current progress / step
+#   5. Next candidate plan
+#
 
-_MAP_PROMPT = """你是一个上下文压缩专家。请阅读以下对话片段，提取关键信息。
+_MAP_PROMPT = """你是一个上下文压缩专家（Compressor Agent）。请阅读以下对话片段，提取关键信息。
 
-请用中文总结以下四个维度：
+你需要分析的是「触发压缩的 Coder Agent 正在做的事情」，并按照以下五个维度用中文总结：
 
-1. **终极目标与动态约束**：这段对话反映了用户的什么核心需求？有没有追加的硬性修正指令？
-2. **已完成的执行路径**：当前已经完成了哪些具体步骤或模块？
-3. **错误履历与免疫策略**：遇到了哪些关键错误？为了规避再犯采用了什么策略？
-4. **当前卡点与待办清单**：执行流程被阻塞在哪一步？下一步的首选候选行动是什么？
+1. **当前目标**：Coder Agent 当下的目标是什么？用户在需求中要求实现什么？
+2. **已完成的执行路径**：Coder Agent 已经完成了哪些具体步骤、模块或文件？
+3. **错误履历与免疫策略**：遇到了哪些关键错误？Coder Agent 为了规避再次犯错采用了什么策略？
+4. **当前执行进度**：Coder Agent 当前执行到了哪一步？（构建中？测试中？修复中？）
+5. **下一步候选计划**：下一步的首选候选行动是什么？有哪些待办事项？
 
 注意：请保持简洁，保留所有关键细节，不要丢失重要信息。
 
@@ -111,14 +130,15 @@ _MAP_PROMPT = """你是一个上下文压缩专家。请阅读以下对话片段
 {chunk}
 """
 
-_REDUCE_PROMPT = """你是一个上下文压缩专家。请将以下多个局部摘要合并为一个统一的全局摘要。
+_REDUCE_PROMPT = """你是一个上下文压缩专家（Compressor Agent）。请将以下多个局部摘要合并为一个统一的全局摘要。
 
-请整合所有信息，用中文总结以下四个维度：
+请整合所有信息，用中文按照以下五个维度总结 Coder Agent 的工作状态：
 
-1. **终极目标与动态约束**：用户最原始的核心需求是什么？交互过程中追加了哪些硬性修正指令？
-2. **已完成的执行路径**：总体完成了哪些具体步骤或模块？
-3. **错误履历与免疫策略**：遇到了哪些关键错误？当前系统为了规避再次犯错采用了什么固定策略？
-4. **当前卡点与待办清单**：执行流程被阻塞在哪一步？下一步的首选候选行动是什么？（此维度最为关键）
+1. **当前目标**：Coder Agent 当下的核心目标是什么？用户需求的本质是什么？
+2. **已完成的执行路径**：总体完成了哪些具体步骤、模块或文件？
+3. **错误履历与免疫策略**：遇到了哪些关键错误？为了规避再次犯错采用了什么固定策略？
+4. **当前执行进度**：当前执行到了哪一步？（构建中？测试中？修复中？）
+5. **下一步候选计划**：下一步的首选候选行动是什么？（此维度最为关键）
 
 注意：消除重复信息，保留所有独特的关键细节。最终的摘要应当自包含，即使脱离原始上下文也能理解。
 
@@ -254,74 +274,132 @@ def compress_history(history: list[dict],
     return global_summary
 
 
-# ── Context reconstruction (Part A + B + C) ─────────────────────────────
+# ── Compressor Agent: Context reconstruction ───────────────────────────
+#
+# After Map-Reduce compression, the Compressor Agent assembles the new
+# context that will be fed to the triggering Coder Agent. The structure is:
+#
+#   1. 用户要求原文 (original user request text)
+#   2. 压缩后的内容 (compressed summary from Map-Reduce)
+#   3. 最近三轮工具调用及原始返回 (last 3 rounds tool calls + results)
+#
+# The Coder Agent's new context = 用户要求原文 + 压缩后的内容 (no old history).
+
+
+def _build_last_n_tool_calls(history: list[dict], n_rounds: int = 3) -> str:
+    """Extract the last N rounds of tool calls with their results from history.
+
+    Each "round" consists of a coder entry followed by a reviewer entry.
+    We look backwards through history to find the last N coder entries and
+    extract their tool-call metadata.
+
+    Args:
+        history: Full session history list.
+        n_rounds: Number of recent rounds to extract (default 3).
+
+    Returns:
+        A formatted string describing the recent tool calls.
+    """
+    if not history:
+        return "(无历史记录)"
+
+    # Find last N "coder" entries (each round has 1 coder entry)
+    coder_entries = []
+    for entry in reversed(history):
+        if entry.get("role") == "coder":
+            coder_entries.append(entry)
+            if len(coder_entries) >= n_rounds:
+                break
+    coder_entries.reverse()
+
+    if not coder_entries:
+        return "(无工具调用记录)"
+
+    lines = []
+    for i, entry in enumerate(coder_entries):
+        round_num = len(history) - coder_entries.index(entry)  # approximate
+        lines.append(f"### 第 {round_num} 轮 — Coder Agent 工具调用\n")
+
+        metadata = entry.get("metadata", {})
+        tool_calls = metadata.get("tool_calls", []) if isinstance(metadata, dict) else []
+
+        if not tool_calls:
+            lines.append("(本轮无工具调用记录)\n")
+        else:
+            for j, tc in enumerate(tool_calls):
+                tname = tc.get("tool", "?")
+                targs = tc.get("args", {})
+                args_str = ", ".join(f"{k}={v}" for k, v in targs.items())
+                lines.append(f"  {j + 1}. **{tname}**({args_str})")
+
+        # Also include the agent's report content as "result"
+        content = entry.get("content", "")
+        if content:
+            # Truncate very long content for readability
+            if len(content) > 500:
+                content = content[:497] + "..."
+            lines.append(f"\n  → 执行报告:\n{content}\n")
+
+    return "\n".join(lines)
 
 
 def build_compressed_context(
     requirement: str,
     history: list[dict],
     compressed_summary: str,
-    recent_rounds: Optional[int] = None,
+    recent_rounds: int = 3,
 ) -> str:
     """Build the new context string from compressed parts.
 
-    Structure:
-      Part A — Long-term compressed summary (from compress_history)
-      Part B — Last N rounds of raw, unmodified conversation
-      Part C — Current blocker & todo list as system instruction
+    The Compressor Agent assembles the context that the triggering Coder
+    Agent will receive. It contains:
+      1. 用户要求原文 (original user request)
+      2. 压缩后的内容 (compressed summary from Map-Reduce)
+      3. 最近三轮工具调用及原始返回 (last N rounds tool calls + results)
+
+    The old accumulated history is **removed** and replaced by the compressed
+    summary. Only the user's original requirement and the compressed content
+    form the Coder Agent's context. The recent tool calls are appended as
+    auxiliary reference.
 
     Args:
-        requirement: The original user requirement.
-        history: Full session history list.
+        requirement: The original user requirement text.
+        history: Full session history list (for extracting recent tool calls).
         compressed_summary: Output from compress_history().
-        recent_rounds: Number of recent rounds to keep raw (default from config).
+        recent_rounds: Number of recent rounds to include tool calls for
+                       (default 3, hardcoded per spec).
 
     Returns:
-        The reconstructed context string ready for injection.
+        The reconstructed context string ready for the Coder Agent.
     """
-    recent = recent_rounds if recent_rounds is not None else settings.compression_recent_rounds
 
-    # ── Part A: Compressed summary ───────────────────────────────────
-    part_a = (
-        "## 📦 Part A — 长期固化记忆（上下文压缩摘要）\n\n"
+    # ── Part 1: 用户要求原文 ─────────────────────────────────────────
+    part_user = (
+        "## 📋 用户要求原文\n\n"
+        f"{requirement}\n"
+    )
+
+    # ── Part 2: 压缩后的内容（Compressor Agent 输出）─────────────────
+    part_compressed = (
+        "## 📦 上下文压缩摘要（Compressor Agent 输出）\n\n"
         f"{compressed_summary}\n"
     )
 
-    # ── Part B: Recent raw history ───────────────────────────────────
-    # Keep last N "rounds" worth of entries (each round = coder + reviewer)
-    if recent > 0 and len(history) > 0:
-        # Take the last recent*2 entries (coder + reviewer per round, roughly)
-        # but at minimum keep recent*2 entries
-        keep_count = min(len(history), max(recent * 2, recent))
-        recent_entries = history[-keep_count:]
-        part_b_lines = [
-            "## 📝 Part B — 短期热数据（最近原始对话）\n",
-        ]
-        for entry in recent_entries:
-            role = entry.get("role", "?")
-            content = entry.get("content", "")
-            part_b_lines.append(f"### [{role.upper()}]\n{content}\n")
-        part_b = "\n".join(part_b_lines)
-    else:
-        part_b = "## 📝 Part B — 短期热数据\n\n(无)\n"
-
-    # ── Part C: Blocker / todo from compressed summary ───────────────
-    # Extract the "当前卡点与待办清单" section from the compressed summary
-    part_c_blocker = _extract_blocker_from_summary(compressed_summary)
-
-    part_c = (
-        "## 🎯 Part C — 即时激活器（当前卡点与待办清单）\n\n"
-        f"{part_c_blocker}\n"
+    # ── Part 3: 最近三轮工具调用及原始返回 ──────────────────────────
+    part_recent_calls = _build_last_n_tool_calls(history, n_rounds=recent_rounds)
+    part_tools = (
+        "## 🔧 最近三轮工具调用记录\n\n"
+        f"{part_recent_calls}\n"
     )
 
     # ── Assemble full context ────────────────────────────────────────
     context = (
-        f"## 原始用户需求\n{requirement}\n\n"
-        f"{part_a}\n\n"
-        f"{part_b}\n\n"
-        f"{part_c}\n\n"
-        "请基于以上上下文（原始需求 + 长期记忆 + 短期热数据 + 当前卡点）"
-        "继续执行任务。注意：Part B 中的历史对话仅供参考，无需重复执行已完成的步骤。"
+        f"{part_user}\n\n"
+        f"{part_compressed}\n\n"
+        f"{part_tools}\n\n"
+        "请基于以上上下文继续执行任务。"
+        "「上下文压缩摘要」部分已替代旧的历史记录，无需重复执行已完成的步骤。"
+        "「最近三轮工具调用记录」仅供参考，帮助你了解最近的执行情况。"
     )
     return context
 

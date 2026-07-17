@@ -49,6 +49,7 @@ OPENAI_MODEL=gpt-4o
 MAX_ITERATIONS=10
 
 # Context Compression (Token 数)
+# 触发压缩阈值固定为 90%（硬编码），不从配置文件读取
 MAX_CONTEXT_LENGTH=1000000
 
 # GitHub Token (用于 GitHub MCP 服务器认证)
@@ -96,9 +97,11 @@ class Settings(BaseSettings):
 
     # Context Compression
     max_context_length: int = 1000000  # 最大上下文窗口（Token 数）
-    context_margin_ratio: float = 0.95  # 安全余量比例（触发压缩阈值）
+    # 压缩阈值固定为 0.90（硬编码，见 context_compressor.py）
+    # 当上下文达到 max_context_length 的 90% 时触发 Compressor Agent。
+    context_margin_ratio: float = 0.90  # (保留用于兼容性，实际已硬编码)
     compression_chunk_max_tokens: int = 50000  # Map 阶段每个 Chunk 的最大 Token 数
-    compression_recent_rounds: int = 5  # Part B 保留的最近完整轮次数
+    compression_recent_rounds: int = 5  # (保留用于兼容性)
 
     # Log Level (only WARNING and above shown on console)
     log_level: str = "WARNING"

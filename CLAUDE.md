@@ -24,7 +24,7 @@
 
 ## Learned Workspace Facts
 
-- 代码结构: `src/agents/`（coder + reviewer）、`src/tools/`（read_file, edit_file, bash_exec + bash_guard）、`src/core/`（config, llm_client, session_store, orchestrator）、`src/ui/`（console, callbacks, collapsible）。
+- 代码结构: `src/agents/`（coder + reviewer）、`src/tools/`（read_file, edit_file, bash_exec + bash_guard）、`src/core/`（config, llm_client, session_store, orchestrator, context_compressor, token_tracker）、`src/ui/`（console, callbacks, collapsible）。
 - 关键依赖: `langchain>=0.3`, `langchain-openai`, `langgraph`, `python-dotenv`, `pydantic-settings`, `requests`, `beautifulsoup4`, `rich`, `keyboard`。
 - 具体的文件级工程记忆已移入对应源文件的头部注释中，搜索 `╔══════════════════════════════════════════════════╗` 即可查阅。
 - 测试文件位于 `tests/` 目录，覆盖所有模块：config, llm_client, session_store, tools,
@@ -38,11 +38,8 @@
 - MCP 配置文件: `~/.becode/mcp.json`（主），`~/.becode/mcp_servers.json`（兼容旧版）。
   同时会加载项目根目录 `mcp.json` 并与之合并（项目配置优先级更高）。
 - 首次运行时静默创建 `~/.becode/.env` 和 `~/.becode/mcp.json`（即 `ensure_config()` 不再弹出交互式提示）。
-- MCP 工具在 `build_coder_agent()` 时动态发现，包装为 `StructuredTool` 注入 Agent。
-- `list_mcp_servers` 工具让 Agent 可见所有已配置的 MCP 服务器及其工具。
-- HTTP 类型的 MCP 服务器支持 `headers` 配置项，支持 `${ENV_VAR}` 环境变量替换。
-  GitHub MCP 使用 `Authorization: Bearer ${GITHUB_TOKEN}` 进行认证。
 - `/CODE_MAP.md` 文件为代码地图，包含目录结构与代码文件的简要说明。
-- 打包配置: `becode.spec` 的 `datas` 列表包含 `prompt_platform_windows.md`、`prompt_platform_darwin.md` 和 `version` 文件。
-- 版本号从项目根目录 `version` 文件中读取（UTF-8），`main.py` 中 `APP_VERSION` 通过 `_read_version()` 函数动态获取。
-- `prompt_platform_*.md` 文件位于 `src/tools/`，通过 `load_platform_prompt()` 按当前 OS 自动加载。
+- **Compressor Agent**: `src/core/context_compressor.py` 实现独立的 Compressor Agent，
+  当上下文达到 `max_context_length` 的 90%（硬编码阈值）时触发 Map-Reduce 压缩。
+  压缩后 Coder Agent 上下文 = 用户原文 + 压缩摘要 + 最近三轮工具调用记录。
+  压缩事件记录在 session 的 `compression_events` 列表中。
