@@ -44,16 +44,25 @@
 - **飞书机器人集成背景**：
   - 飞书（Feishu/Lark）开放平台提供 Bot API：消息推送、事件订阅、交互式卡片。
   - 官方 Python SDK: `lark-oapi`。
-  - ❗ **飞书官方 MCP Server 已存在**：`larksuite/lark-openapi-mcp`（npm: `@larksuiteoapi/lark-mcp`），由 Lark 官方 GitHub 组织发布，非第三方项目。已将飞书开放平台 300+ API 封装为 MCP 工具（文档/消息/日历/多维表格/通讯录/任务等）。状态为 Beta，支持 stdio/SSE/StreamableHTTP 三种传输模式。
+  - ❗ **飞书官方 MCP Server 已存在**：`larksuite/lark-openapi-mcp`（npm: `@larksuiteoapi/lark-mcp`），由 Lark 官方 GitHub 组织发布，非第三方项目。已将飞书开放平台 300+ API 封装为 MCP 工具（文档/消息/日历/多维表格/通讯录/任务等）。状态为 Beta（v0.5.1），770 stars，支持 stdio/SSE/StreamableHTTP 三种传输模式。
   - **用户明确要求**：不使用第三方开源项目，倾向飞书官方 MCP 服务器或开放平台原生能力。
   - BeCode 集成推荐路线：直接使用飞书官方 MCP Server（`@larksuiteoapi/lark-mcp`），通过 BeCode 的 `mcp_manager.py` 加载 Command 类型 MCP Server，**不需要自实现 MCP Server 代码**。
   - 配置方式：`"command": "npx", "args": ["-y", "@larksuiteoapi/lark-mcp", "mcp", "-a", "<APP_ID>", "-s", "<APP_SECRET>"]`
   - 支持两种认证模式：`tenant_access_token`（应用级）和 `user_access_token`（OAuth 用户级扫码授权）。
   - 支持双版本：国内版默认（`open.feishu.cn`），国际版 `--domain https://open.larksuite.com`。
   - BeCode 仓库已存在 issues：#1（GitHub MCP 测试）、#5（飞书机器人支持提议）。
-  - **飞书权限快捷方式**：
-    - 批量导入权限 JSON：`{"scopes":{"tenant":["im:message","im:message:send_as_bot","im:resource"]}}`，粘贴即用。
-    - WebSocket 长连接代替 HTTP 回调（lark-oapi 原生支持 ws.Client()，无需公网）。
-    - SDK 自动 Token 管理（lark-oapi 自动处理获取/刷新/缓存/重试）。
-  - **扫码一键配置**：飞书官方的 **OAuth 2.0 模式**（`--oauth`）支持用户扫码授权个人身份，一人配置后其他团队成员扫码即可使用。但自建应用的 App ID / App Secret 仍需手动配置一次。
+  - **飞书 MCP 快速接入体系（7 个快捷方式，按推荐优先级排列）**：
+    1. **预设工具集（Presets）**：按场景打包 API 工具，`-t preset.im.default` 一行配置代替手工挑选 300+ API。可用预设：`preset.default`（默认，通用）、`preset.light`（最小化）、`preset.im.default`（消息）、`preset.base.default`（多维表格）、`preset.doc.default`（文档）、`preset.task.default`（任务）、`preset.calendar.default`（日历）。
+    2. **批量导入权限 JSON 模板**：`mcp_larkbot_demo` 已提供完整权限模板，粘贴即用，无需手工勾选。
+    3. **官方 Demo 模板（lark-samples）**：[lark-samples](https://github.com/larksuite/lark-samples) 仓库提供可直接运行的模板：`mcp_larkbot_demo/nodejs`（MCP 飞书 Bot Agent，含 AI 集成）、`mcp_quick_demo/{python,go,java,nodejs}`（多语言 MCP 快速入门）、`robot_quick_start/python`（飞书机器人快速开发）。
+    4. **OAuth 扫码登录**：一人配置 App ID/Secret，全团队扫码使用；支持 `--scope offline_access docx:document` 等细粒度授权范围。
+    5. **WebSocket 长连接**：跳过 HTTP 回调配置，无需公网 IP/域名/HTTPS。
+    6. **多语言 SDK 框架支持**：LangChain（Python/Node.js）、Spring AI（Java）、Vercel AI SDK（Node.js）、`@larksuiteoapi/node-sdk`、`lark-oapi`（Python），均提供完整示例。
+    7. **MCP 一键安装按钮**：支持 Cursor/Trae 等 AI IDE 的一键安装（deep link）。
+  - **lark-openapi-mcp 关键特性**：
+    - 依赖：`@larksuiteoapi/node-sdk ^1.50.0`、`@modelcontextprotocol/sdk ^1.12.1`、`commander ^13.1.0`
+    - 支持配置文件：通过 `--config ./config.json` 传入 JSON 配置（支持 `appId`/`appSecret`/`tools`/`language`/`oauth`/`tokenMode`/`mode`/`host`/`port` 等字段）
+    - 支持环境变量：`APP_ID`、`APP_SECRET`、`LARK_TOOLS`（工具列表）、`LARK_DOMAIN`、`LARK_TOKEN_MODE`
+    - OAuth 登录命令：`npx -y @larksuiteoapi/lark-mcp login -a <APP_ID> -s <APP_SECRET>`（默认重定向 URL: http://localhost:3000/callback）
+    - 清空登录令牌：`npx -y @larksuiteoapi/lark-mcp logout -a <APP_ID>`
   - **飞书应用商店模式**：应用上架到飞书应用商店后，企业管理员可扫码一键安装，但需通过飞书审核流程。
