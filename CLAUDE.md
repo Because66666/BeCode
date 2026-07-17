@@ -21,6 +21,7 @@
 - Agnet 工作流的设计模式：Coder Agent（实现）→ Reviewer Agent（审查）→ 反馈循环，每轮落盘持久化。
 - 当前每完成一次工作后，对当前工作进行简短总结，使用git工具进行提交。**不要使用git push**。
 - 具体的文件级工程记忆写入对应的文件头部注释。
+- **飞书集成偏好**：用户明确要求**不使用第三方开源项目**，倾向使用飞书官方提供的 MCP 服务器或飞书开放平台的原生能力。用户在 Issue #5 的讨论中拒绝了第三方开源 MCP 项目方案。
 
 ## Learned Workspace Facts
 
@@ -43,21 +44,16 @@
 - **飞书机器人集成背景**：
   - 飞书（Feishu/Lark）开放平台提供 Bot API：消息推送、事件订阅、交互式卡片。
   - 官方 Python SDK: `lark-oapi`。
-  - 参考 MCP 项目：`loonghao/feishu-bot-mcp-server`（模板项目，仅 boilerplate 无实质代码）；非 MCP 项目：`chatopera/chatopera.feishu`、`feishu-codex-bot`（⭐ CJdrilke，最完整参考）、`feishu-claudecode-qiao`（⭐ songqingjun060，另一完整实现）。
-  - BeCode 集成推荐路线：MCP 驱动集成（复用 `mcp_manager.py`，新增独立 MCP Server）。
+  - ❗ **飞书官方 MCP Server 已存在**：`larksuite/lark-openapi-mcp`（npm: `@larksuiteoapi/lark-mcp`），由 Lark 官方 GitHub 组织发布，非第三方项目。已将飞书开放平台 300+ API 封装为 MCP 工具（文档/消息/日历/多维表格/通讯录/任务等）。状态为 Beta，支持 stdio/SSE/StreamableHTTP 三种传输模式。
+  - **用户明确要求**：不使用第三方开源项目，倾向飞书官方 MCP 服务器或开放平台原生能力。
+  - BeCode 集成推荐路线：直接使用飞书官方 MCP Server（`@larksuiteoapi/lark-mcp`），通过 BeCode 的 `mcp_manager.py` 加载 Command 类型 MCP Server，**不需要自实现 MCP Server 代码**。
+  - 配置方式：`"command": "npx", "args": ["-y", "@larksuiteoapi/lark-mcp", "mcp", "-a", "<APP_ID>", "-s", "<APP_SECRET>"]`
+  - 支持两种认证模式：`tenant_access_token`（应用级）和 `user_access_token`（OAuth 用户级扫码授权）。
+  - 支持双版本：国内版默认（`open.feishu.cn`），国际版 `--domain https://open.larksuite.com`。
   - BeCode 仓库已存在 issues：#1（GitHub MCP 测试）、#5（飞书机器人支持提议）。
-  - **飞书权限快捷方式（Issue #5 讨论结论）**：
-    - 批量导入权限 JSON：`{"scopes":{"tenant":["im:message","im:message:send_as_bot","im:resource"]}}`，粘贴即用，省去手工勾选 10+ 项。
-    - WebSocket 长连接模式替代 HTTP 回调：`lark-oapi` SDK 原生支持 `ws.Client()`，免除公网 IP/域名/HTTPS 部署需求。
-    - SDK 自动 Token 管理：`lark-oapi` 自动处理 `tenant_access_token` 获取、刷新、缓存、重试，MCP Server 只需提供 `app_id` + `app_secret`。
-    - 三者组合可将飞书 Bot 权限配置从 ~30 分钟缩短到 ~3 分钟。
-    - lark-oapi 通过 `domain` 参数区分国内版（`.feishu.cn`）和国际版（`.larksuite.com`），代码层面支持双版本成本极低。
-  - **feishu-codex-bot 关键设计参考**：
-    - 用 `lark_oapi.ws.Client` 实现 WebSocket 长连接接收事件。
-    - 权限批量导入文件 `config/feishu_permissions.json`。
-    - 每用户会话隔离 + /bg 后台并行 + git worktree 隔离。
-    - 配置通过 `.env` 的 `FEISHU_APP_ID` / `FEISHU_APP_SECRET` 注入。
-  - **feishu-claudecode-qiao 关键设计参考**：
-    - 支持 `oneshot`（稳定）和 `persistent`（实验加速）双 runner 模式。
-    - 安全策略：`allowed_paths`、权限档位（readonly/safe/dev/admin）、会话规则。
-    - 支持 Whisper 语音预加载、媒体批处理、长记忆、审计日志。
+  - **飞书权限快捷方式**：
+    - 批量导入权限 JSON：`{"scopes":{"tenant":["im:message","im:message:send_as_bot","im:resource"]}}`，粘贴即用。
+    - WebSocket 长连接代替 HTTP 回调（lark-oapi 原生支持 ws.Client()，无需公网）。
+    - SDK 自动 Token 管理（lark-oapi 自动处理获取/刷新/缓存/重试）。
+  - **扫码一键配置**：飞书官方的 **OAuth 2.0 模式**（`--oauth`）支持用户扫码授权个人身份，一人配置后其他团队成员扫码即可使用。但自建应用的 App ID / App Secret 仍需手动配置一次。
+  - **飞书应用商店模式**：应用上架到飞书应用商店后，企业管理员可扫码一键安装，但需通过飞书审核流程。
