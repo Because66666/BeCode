@@ -48,3 +48,9 @@
   的参数被 LangChain 静默丢弃。`_create_args_schema()` 将 MCP 工具的 `input_schema.
   properties` 转为 Pydantic model，确保参数正确传递。`_make_mcp_tool_fn()` 中还会
   在调用前过滤掉值为 `None` 的参数，避免 MCP 服务器拒绝 `null` 值。
+- **飞书机器人集成背景**：
+  - 飞书（Feishu/Lark）开放平台提供 Bot API：消息推送、事件订阅、交互式卡片。
+  - 官方 Python SDK: `lark-oapi`。
+  - 参考 MCP 项目：`loonghao/feishu-bot-mcp-server`（模板）；非 MCP 项目：`chatopera/chatopera.feishu`、`feishu-codex-bot`、`feishu-claudecode-qiao`。
+  - BeCode 集成推荐路线：MCP 驱动集成（复用 `mcp_manager.py`，新增独立 MCP Server）。
+  - BeCode 仓库已存在 issues：#1（GitHub MCP 测试）、#5（飞书机器人支持提议）。
