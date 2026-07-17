@@ -20,19 +20,11 @@
   应重试多次后再决定是否退出；JSON 解析错误应归入工具调用错误类别。
 - Agnet 工作流的设计模式：Coder Agent（实现）→ Reviewer Agent（审查）→ 反馈循环，每轮落盘持久化。
 - 当前每完成一次工作后，对当前工作进行简短总结，使用git工具进行提交。**不要使用git push**。
-- 具体的文件级工程记忆写入对应的文件头部注释，其余重要的记忆写入`## Learned Workspace Facts`部分。只写你认为以后用的上的，至于你具体实现了什么不必写。
+- 具体的文件级工程记忆写入对应的文件头部注释。
 
 ## Learned Workspace Facts
 
-- 代码结构: `src/agents/`（coder + reviewer）、`src/tools/`（read_file, edit_file, bash_exec + bash_guard）、`src/core/`（config, llm_client, session_store, orchestrator, context_compressor, token_tracker）、`src/ui/`（console, callbacks, collapsible）。
-- 关键依赖: `langchain>=0.3`, `langchain-openai`, `langgraph`, `python-dotenv`, `pydantic-settings`, `requests`, `beautifulsoup4`, `rich`, `keyboard`。
-- 具体的文件级工程记忆已移入对应源文件的头部注释中，搜索 `╔══════════════════════════════════════════════════╗` 即可查阅。
-- 测试文件位于 `tests/` 目录，覆盖所有模块：config, llm_client, session_store, tools,
-  bash_guard, web_search, orchestrator, console, callbacks, collapsible,
-  coder_agent, reviewer_agent, main, mcp_manager。
 - 运行全部测试命令：`python -m pytest tests/ -v`（或 `pytest tests/ -v`）。
-- 由于 `@tool` 装饰器返回 `StructuredTool` 对象，测试中使用 `tool.func()` 
-  调用原始函数（通过 `_call(tool, *args)` 辅助函数）。
 - 环境变量 `BASH_GUARD_LLM_DISABLED=1` 在测试中自动设置以跳过 LLM 安全审查层。
 - MCP Server 支持: `src/tools/mcp_manager.py`，支持 HTTP 和 Command 两种类型。
 - MCP 配置文件: `~/.becode/mcp.json`（主），`~/.becode/mcp_servers.json`（兼容旧版）。
@@ -51,6 +43,21 @@
 - **飞书机器人集成背景**：
   - 飞书（Feishu/Lark）开放平台提供 Bot API：消息推送、事件订阅、交互式卡片。
   - 官方 Python SDK: `lark-oapi`。
-  - 参考 MCP 项目：`loonghao/feishu-bot-mcp-server`（模板）；非 MCP 项目：`chatopera/chatopera.feishu`、`feishu-codex-bot`、`feishu-claudecode-qiao`。
+  - 参考 MCP 项目：`loonghao/feishu-bot-mcp-server`（模板项目，仅 boilerplate 无实质代码）；非 MCP 项目：`chatopera/chatopera.feishu`、`feishu-codex-bot`（⭐ CJdrilke，最完整参考）、`feishu-claudecode-qiao`（⭐ songqingjun060，另一完整实现）。
   - BeCode 集成推荐路线：MCP 驱动集成（复用 `mcp_manager.py`，新增独立 MCP Server）。
   - BeCode 仓库已存在 issues：#1（GitHub MCP 测试）、#5（飞书机器人支持提议）。
+  - **飞书权限快捷方式（Issue #5 讨论结论）**：
+    - 批量导入权限 JSON：`{"scopes":{"tenant":["im:message","im:message:send_as_bot","im:resource"]}}`，粘贴即用，省去手工勾选 10+ 项。
+    - WebSocket 长连接模式替代 HTTP 回调：`lark-oapi` SDK 原生支持 `ws.Client()`，免除公网 IP/域名/HTTPS 部署需求。
+    - SDK 自动 Token 管理：`lark-oapi` 自动处理 `tenant_access_token` 获取、刷新、缓存、重试，MCP Server 只需提供 `app_id` + `app_secret`。
+    - 三者组合可将飞书 Bot 权限配置从 ~30 分钟缩短到 ~3 分钟。
+    - lark-oapi 通过 `domain` 参数区分国内版（`.feishu.cn`）和国际版（`.larksuite.com`），代码层面支持双版本成本极低。
+  - **feishu-codex-bot 关键设计参考**：
+    - 用 `lark_oapi.ws.Client` 实现 WebSocket 长连接接收事件。
+    - 权限批量导入文件 `config/feishu_permissions.json`。
+    - 每用户会话隔离 + /bg 后台并行 + git worktree 隔离。
+    - 配置通过 `.env` 的 `FEISHU_APP_ID` / `FEISHU_APP_SECRET` 注入。
+  - **feishu-claudecode-qiao 关键设计参考**：
+    - 支持 `oneshot`（稳定）和 `persistent`（实验加速）双 runner 模式。
+    - 安全策略：`allowed_paths`、权限档位（readonly/safe/dev/admin）、会话规则。
+    - 支持 Whisper 语音预加载、媒体批处理、长记忆、审计日志。
