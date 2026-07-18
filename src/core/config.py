@@ -30,7 +30,7 @@ SESSION_DIR.mkdir(parents=True, exist_ok=True)
 
 # Session memory directory — stores structured memory notes for interactive
 # sessions. Each file is named <session_id>.md.
-SESSION_MEMORY_DIR = BECODE_HOME / "session"
+SESSION_MEMORY_DIR = BECODE_HOME / "memory"
 SESSION_MEMORY_DIR.mkdir(parents=True, exist_ok=True)
 
 # .env 路径（尚未创建——由 ensure_config() 在 main() 中处理）

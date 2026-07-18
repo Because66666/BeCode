@@ -1,6 +1,6 @@
 """Session Memory Tool — persistent note-taking across interactive sessions.
 
-Stores structured notes in ``~/.becode/session/<session_id>.md``.
+Stores structured notes in ``~/.becode/memory/<session_id>.md``.
 
 Two modes:
 - ``write``: Append notes to the session memory file.  The notes are
@@ -19,7 +19,7 @@ interactive dialogue mode.
 ║  - 工具仅注册到 Coder Agent，且始终可用，        ║
 ║    但仅在交互式对话中有实际效果（session ID      ║
 ║    会被设置）。                                  ║
-║  - 记忆文件路径: ~/.becode/session/{id}.md       ║
+║  - 记忆文件路径: ~/.becode/memory/{id}.md        ║
 ╚══════════════════════════════════════════════════╝
 """
 
