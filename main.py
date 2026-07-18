@@ -29,6 +29,10 @@ from src.core.config import settings, BECODE_HOME, SESSION_DIR, ensure_config, r
 from src.core.orchestrator import Orchestrator
 from src.core.session_store import SessionStore
 from src.tools.mcp_manager import get_mcp_config_path
+from src.tools.session_memory import (
+    set_session_memory_id,
+    load_session_memory,
+)
 from src.tools.tools import set_workspace_root
 
 # ── Application metadata ───────────────────────────────────────────
@@ -103,6 +107,15 @@ def interactive_mode(orchestrator: Orchestrator, model_name: Optional[str] = Non
         max_iterations=settings.max_iterations,
         model=settings.openai_model,
     )
+
+    # ── Initialize session memory for this interactive session ──
+    set_session_memory_id(orchestrator.session.session_id)
+    existing_memory = load_session_memory()
+    if existing_memory:
+        console.print(
+            "[bold cyan]📝 检测到已有会话记忆[/] — 已自动加载到 Coder Agent 上下文中。\n"
+        )
+
     console.print(
         "[bold italic cyan]🤖 交互式对话模式[/] — 输入任务需求开始，输入 [bold].exit[/] 退出\n"
     )

@@ -28,6 +28,11 @@ BECODE_HOME.mkdir(parents=True, exist_ok=True)
 SESSION_DIR = BECODE_HOME / "sessions"
 SESSION_DIR.mkdir(parents=True, exist_ok=True)
 
+# Session memory directory — stores structured memory notes for interactive
+# sessions. Each file is named <session_id>.md.
+SESSION_MEMORY_DIR = BECODE_HOME / "session"
+SESSION_MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+
 # .env 路径（尚未创建——由 ensure_config() 在 main() 中处理）
 env_path = BECODE_HOME / ".env"
 # 首次导入时尝试加载（如果存在的话），避免 import 时因缺失而中断

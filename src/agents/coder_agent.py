@@ -46,6 +46,7 @@ from src.tools.mcp_manager import (
     format_mcp_context,
     list_mcp_servers_tool,
 )
+from src.tools.session_memory import session_memory, load_session_memory
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,8 @@ def _build_system_prompt(mcp_tools_str: str) -> str:
 - bash_exec: Run a bash command (safety-checked automatically).
 - web_search: Search the web for information (e.g., docs, libraries, solutions).
 - web_fetch: Fetch and extract text content from a web page URL.
-- list_mcp_servers: List all configured MCP servers and their available tools."""
+- list_mcp_servers: List all configured MCP servers and their available tools.
+- session_memory: 记录/回顾当前交互式对话中的重要项目知识和信息。支持两个模式: write(写入) 和 read only(只读)。当完成任务后有重要信息要记录时使用 write 模式；当对项目感到困惑时使用 read only 模式检查笔记内容。"""
 
     prompt = f"""You are an expert coding assistant (Coder Agent) in BeCode. Your goal is to implement
 the user's requirements by reading, editing files and running commands.
@@ -130,7 +132,7 @@ def build_coder_agent(model_name: Optional[str] = None):
 
     # ── Built-in tools ────────────────────────────────────────────────
     tools = [read_file, edit_file, bash_exec, web_search, web_fetch,
-             list_mcp_servers_tool]
+             list_mcp_servers_tool, session_memory]
 
     # ── MCP tools ─────────────────────────────────────────────────────
     mcp_tools = get_available_mcp_tools()
@@ -180,10 +182,14 @@ def run_coder(requirement: str, feedback: str = "", model_name: Optional[str] = 
     context = load_context_files()
     context_block = f"\n\n## 工作区上下文\n{context}" if context else ""
 
+    # ── Load session memory (interactive mode notes) ────────────
+    session_memory_block = load_session_memory()
+
     user_message = (
         f"## 用户需求\n{requirement}\n\n"
         f"## 之前的审查反馈\n{feedback if feedback else '(无 — 首轮编码)'}"
-        f"{context_block}\n\n"
+        f"{context_block}"
+        f"{session_memory_block}\n\n"
         "请实现以上需求，完成后输出 FINAL REPORT。"
     )
 

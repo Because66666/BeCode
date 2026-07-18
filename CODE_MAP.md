@@ -23,6 +23,7 @@ BeCode/
 │   │   ├── __init__.py               # 导出 MCP 管理工具 (list_mcp_servers 等)
 │   │   ├── tools.py                  # 核心工具：read_file, edit_file, bash_exec, load_context_files
 │   │   ├── bash_guard.py             # Bash 安全审查：LLM 审查 + 规则审查双模式
+│   │   ├── session_memory.py         # 会话记忆工具：记录/回顾交互式对话中的项目笔记
 │   │   ├── web_search.py             # 网络搜索：Bing 抓取 (web_search) + 网页提取 (web_fetch)
 │   │   ├── mcp_manager.py            # MCP 服务器管理：HTTP/Command 类型，动态发现工具
 │   │   ├── prompt_platform_darwin.md # macOS 平台 bash 提示词模板
