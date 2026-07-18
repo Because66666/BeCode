@@ -28,6 +28,11 @@ BECODE_HOME.mkdir(parents=True, exist_ok=True)
 SESSION_DIR = BECODE_HOME / "sessions"
 SESSION_DIR.mkdir(parents=True, exist_ok=True)
 
+# Session memory directory — stores structured memory notes for interactive
+# sessions. Each file is named <session_id>.md.
+SESSION_MEMORY_DIR = BECODE_HOME / "memory"
+SESSION_MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+
 # .env 路径（尚未创建——由 ensure_config() 在 main() 中处理）
 env_path = BECODE_HOME / ".env"
 # 首次导入时尝试加载（如果存在的话），避免 import 时因缺失而中断
@@ -47,6 +52,10 @@ OPENAI_MODEL=gpt-4o
 
 # Agent Workflow
 MAX_ITERATIONS=10
+
+# Context Compression (Token 数)
+# 触发压缩阈值固定为 90%（硬编码），不从配置文件读取
+MAX_CONTEXT_LENGTH=1000000
 
 # GitHub Token (用于 GitHub MCP 服务器认证)
 # 生成方式: https://github.com/settings/tokens (需要 copilot 权限)
@@ -90,6 +99,14 @@ class Settings(BaseSettings):
 
     # GitHub (for MCP authentication, consumed via os.environ)
     github_token: str = ""
+
+    # Context Compression
+    max_context_length: int = 1000000  # 最大上下文窗口（Token 数）
+    # 压缩阈值固定为 0.90（硬编码，见 context_compressor.py）
+    # 当上下文达到 max_context_length 的 90% 时触发 Compressor Agent。
+    context_margin_ratio: float = 0.90  # (保留用于兼容性，实际已硬编码)
+    compression_chunk_max_tokens: int = 50000  # Map 阶段每个 Chunk 的最大 Token 数
+    compression_recent_rounds: int = 5  # (保留用于兼容性)
 
     # Log Level (only WARNING and above shown on console)
     log_level: str = "WARNING"

@@ -72,3 +72,10 @@ Thumbs.db
 ## pytest
 ## ============================================
 .pytest_cache/
+
+## ============================================
+## 快速完成 issue -> pull request
+## ============================================
+quickly_issue.bat
+issue_to_pullrequest.md
+re.md

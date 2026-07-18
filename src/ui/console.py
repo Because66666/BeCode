@@ -289,6 +289,73 @@ class AgentConsole:
             )
         self._console.print()
 
+    # ── Context Compression ────────────────────────────────────────────
+
+    def compression_progress(self, step: int, total: int, message: str):
+        """Display a dynamic compression progress indicator.
+
+        Shows Compressor Agent's Map-Reduce progress.
+        The format: "生成局部摘要 x/y ..." or "合并摘要 x/y ..."
+        """
+        if total <= 0:
+            # Indeterminate progress
+            text = f"[bold yellow]🤖 Compressor Agent 工作...[/] [dim]{message}[/]"
+        else:
+            bar_len = 20
+            filled = int(step * bar_len / total) if total > 0 else 0
+            bar = "█" * filled + "░" * (bar_len - filled)
+            pct = int(step * 100 / total) if total > 0 else 0
+            text = (
+                f"[bold yellow]🤖 Compressor Agent[/]  [{bar}] [bold]{pct}%[/]\n"
+                f"  [dim]{message}[/]"
+            )
+        self._console.print(
+            Panel(
+                Text.from_markup(text),
+                box=box.SIMPLE,
+                border_style="yellow",
+                width=self._width,
+                padding=(0, 1),
+            )
+        )
+
+    def compression_start(self):
+        """Show the compression start panel — Compressor Agent activated."""
+        self._console.print()
+        self._console.print(
+            Panel(
+                Text.from_markup(
+                    "[bold yellow]🗜️ Compressor Agent 已激活[/]\n"
+                    "[dim]上下文窗口 > 90%，正在压缩历史记录以释放上下文空间...[/]"
+                ),
+                box=box.HEAVY,
+                border_style="yellow",
+                width=self._width,
+                title="[bold yellow]🤖 Compressor Agent[/]",
+            )
+        )
+        self._console.print()
+
+    def compression_result(self, before_chars: int, after_chars: int,
+                           ratio: float):
+        """Display compression result summary from Compressor Agent."""
+        self._console.print(
+            Panel(
+                Text.from_markup(
+                    f"[bold green]✅ Compressor Agent 压缩完成[/]\n\n"
+                    f"[white]压缩前上下文:[/] [cyan]{before_chars:,}[/] 字符\n"
+                    f"[white]压缩后上下文:[/] [cyan]{after_chars:,}[/] 字符\n"
+                    f"[white]压缩率:[/] [bold yellow]{ratio:.1f}%[/]\n\n"
+                    f"[dim]Coder Agent 上下文已刷新为: 用户需求 + 压缩摘要[/]"
+                ),
+                box=box.ROUNDED,
+                border_style="green",
+                width=self._width,
+                title="[bold green]🤖 Compressor Agent 报告[/]",
+            )
+        )
+        self._console.print()
+
     # ── Iteration / Agent Lifecycle ───────────────────────────────────
 
     def start_iteration(self, iteration: int, total: int):
@@ -560,6 +627,8 @@ class AgentConsole:
         c_out = tracker.coder_output
         r_inp = tracker.reviewer_input
         r_out = tracker.reviewer_output
+        comp_inp = tracker.compressor_input
+        comp_out = tracker.compressor_output
 
         coder_token_str = (
             f"[bold green]🤖 Coder[/]  [cyan]输入 {_fmt(c_inp)}[/]  │  "
@@ -570,6 +639,11 @@ class AgentConsole:
             f"[bold magenta]🔍 Reviewer[/]  [cyan]输入 {_fmt(r_inp)}[/]  │  "
             f"[cyan]输出 {_fmt(r_out)}[/]  │  "
             f"[bold cyan]合计 {_fmt(r_inp + r_out)}[/]"
+        )
+        compressor_token_str = (
+            f"[bold yellow]🗜️ Compressor[/]  [cyan]输入 {_fmt(comp_inp)}[/]  │  "
+            f"[cyan]输出 {_fmt(comp_out)}[/]  │  "
+            f"[bold cyan]合计 {_fmt(comp_inp + comp_out)}[/]"
         )
 
         inp_tok = tracker.total_input_tokens
@@ -583,6 +657,19 @@ class AgentConsole:
 
         # ── Compact statistics ───────────────────────────────────────
         coder_k_len = f"{len(coder_report) / 1000:.1f}K"
+        # Show compression events if any
+        compression_info = ""
+        try:
+            from src.core.session_store import SessionStore
+            # We don't have the session here directly, but we can show
+            # if compressor was used
+            if comp_inp + comp_out > 0:
+                compression_info = (
+                    f"\n[bold yellow]🗜️ Compressor 已使用[/]"
+                )
+        except Exception:
+            pass
+
         stats_text = (
             f"[bold]状态:[/] [{status_color}]{status_icon} {status_text}[/]  │  "
             f"[bold]轮次:[/] [white]{total_turns}[/]  │  "
@@ -590,7 +677,9 @@ class AgentConsole:
             f"[bold]Coder上下文:[/] [cyan]{coder_k_len}[/]\n"
             f"{coder_token_str}\n"
             f"{reviewer_token_str}\n"
+            f"{compressor_token_str}\n"
             f"{total_token_str}"
+            f"{compression_info}"
         )
         self._console.print()
         self._console.print(

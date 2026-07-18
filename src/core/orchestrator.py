@@ -43,6 +43,13 @@ from rich import box
 from src.agents.coder_agent import run_coder
 from src.agents.reviewer_agent import run_reviewer
 from src.core.config import settings
+from src.core.context_compressor import (
+    should_compress,
+    compress_history,
+    build_compressed_context,
+    record_compression_event,
+    estimate_tokens,
+)
 from src.core.session_store import SessionStore
 from src.core.token_tracker import get_token_tracker
 from src.tools.tools import set_user_requirement
@@ -271,16 +278,89 @@ class Orchestrator:
         coder_reports: list[str] = []
         review_verdicts: list[str] = []
         feedback = ""
+        compressed_summary: Optional[str] = None  # Cached compressed summary
 
         for iteration in range(1, self.max_iterations + 1):
             logger.info("=== Iteration %d / %d ===", iteration, self.max_iterations)
             console.start_iteration(iteration, self.max_iterations)
+
+            # ── Context Compression Check (Compressor Agent entry) ────
+            # Before each Coder run, check whether the accumulated context has
+            # reached 90 % of max_context_length. If so, invoke the Compressor
+            # Agent to compress the session history.
+            #
+            # Compressor Agent flow:
+            #   1. Calculate accumulated context size
+            #   2. If >= 90 % threshold → trigger Map-Reduce compression
+            #   3. Build compressed context = user original + compressed summary
+            #      + last 3 rounds tool calls
+            #   4. Replace coder_requirement with compressed context
+            #   5. Session now has only user original + compressed summary
+            #      (old history removed from Coder's view)
+            accumulated_context = build_coder_accumulated_context(
+                requirement=requirement,
+                feedback=feedback,
+                compressed_summary=compressed_summary,
+                history=self.session.history,
+            )
+            if should_compress(accumulated_context):
+                logger.info("[Compressor Agent] Context compression triggered at iteration %d", iteration)
+                console.compression_start()
+
+                # ── Phase 1: Estimate before size ─────────────────────
+                history = self.session.history
+                before_chars = sum(
+                    len(str(e.get("content", ""))) for e in history
+                )
+
+                # ── Phase 2: Map-Reduce compression (Compressor Agent) ──
+                # The compressor runs independently: it reads the full session
+                # history, generates local summaries (Map), then merges them
+                # (Reduce) into one coherent compressed summary.
+                compressed_summary = compress_history(
+                    history,
+                    progress=console.compression_progress,
+                )
+
+                # ── Phase 3: Build compressed context ──────────────────
+                # The Compressor Agent assembles the new context:
+                #   - 用户要求原文 (user requirement)
+                #   - 压缩后的内容 (compressed summary)
+                #   - 最近三轮工具调用及原始返回
+                compressed_context = build_compressed_context(
+                    requirement=requirement,
+                    history=history,
+                    compressed_summary=compressed_summary,
+                )
+
+                # Estimate after size
+                after_chars = len(compressed_context)
+
+                # ── Phase 4: Record compression event in session ──────
+                event = record_compression_event(
+                    self.session, before_chars, after_chars
+                )
+
+                # ── Phase 5: Display compression result ───────────────
+                console.compression_result(
+                    before_chars, after_chars,
+                    event["compression_ratio_pct"],
+                )
+
+                # ── Phase 6: Set compressed context as new requirement ─
+                # The Coder Agent's context is now:
+                #   用户要求原文 + 压缩后的内容（无旧历史记录）
+                coder_requirement = compressed_context
+            else:
+                coder_requirement = requirement
 
             # ── Step A: Coder (with retry logic) ────────────────────────
             # NOTE: run_coder() builds a BRAND-NEW agent each round and
             # passes only `requirement` + `feedback` (the reviewer's clean
             # actionable items).  No previous round's thoughts or tool calls
             # are included.  See `coder_agent.py` for details.
+            # When compression is active, `coder_requirement` contains the
+            # full Part A+B+C compressed context.
             #
             # RETRY POLICY:
             # Coder 调用可能因 LLM API 错误 / 工具执行错误 / JSON 解析
@@ -299,7 +379,7 @@ class Orchestrator:
             for attempt in range(1, MAX_CODER_RETRIES + 2):  # 1..4
                 try:
                     coder_report = run_coder(
-                        requirement=requirement,
+                        requirement=coder_requirement,
                         feedback=feedback,
                         model_name=self.model_name,
                         callbacks=[coder_callback],
@@ -568,6 +648,59 @@ class Orchestrator:
 
 
 # ── Module-level helpers ────────────────────────────────────────────────
+
+
+def build_coder_accumulated_context(
+    requirement: str,
+    feedback: str,
+    compressed_summary: Optional[str] = None,
+    history: Optional[list[dict]] = None,
+) -> str:
+    """Build the simulated accumulated context for the Coder Agent.
+
+    This is used to estimate whether the context has grown large enough to
+    trigger compression.  It mirrors what ``run_coder()`` actually receives.
+
+    Args:
+        requirement: Original user requirement (or compressed context if
+                     compression was already applied).
+        feedback: Reviewer's actionable feedback.
+        compressed_summary: Previously compressed summary (Part A), if any.
+        history: Full session history list (for size estimation).
+
+    Returns:
+        A concatenated string representing the full context the Coder
+        would receive.
+    """
+    parts = [f"## 用户需求\n{requirement}"]
+
+    if feedback:
+        parts.append(f"## 之前的审查反馈\n{feedback}")
+
+    # Add compressed summary from previous compression if available
+    if compressed_summary:
+        parts.append(f"## 历史压缩摘要\n{compressed_summary}")
+
+    # Add workspace context
+    try:
+        from src.tools.tools import load_context_files
+        context = load_context_files()
+        if context:
+            parts.append(f"## 工作区上下文\n{context}")
+    except Exception:
+        pass
+
+    # Include last few rounds of history for accurate size estimation
+    if history and len(history) > 0:
+        recent = history[-10:]  # Last 10 entries for estimation
+        hist_lines = ["## 会话历史"]
+        for entry in recent:
+            role = entry.get("role", "?")
+            content = entry.get("content", "")
+            hist_lines.append(f"[{role}]: {content[:200]}")
+        parts.append("\n".join(hist_lines))
+
+    return "\n\n".join(parts)
 
 
 def _show_coder_fatal_error(console, category: ErrorCategory, exc: Optional[Exception]):

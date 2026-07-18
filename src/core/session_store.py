@@ -79,8 +79,27 @@ class SessionStore:
     def requirement(self, value: str):
         self._data["requirement"] = value
 
+    @property
+    def compression_events(self) -> list[dict]:
+        return self._data.get("compression_events", [])
+
+    def record_token_usage(self, usage_data: dict):
+        """Record per-agent token usage data into the session.
+
+        Args:
+            usage_data: dict from TokenTracker.get_all_usage()
+        """
+        self._data["token_usage"] = usage_data
+
     def save(self):
         """Flush in-memory state to disk."""
+        # Record token usage before saving
+        try:
+            from src.core.token_tracker import get_token_tracker
+            tracker = get_token_tracker()
+            self.record_token_usage(tracker.get_all_usage())
+        except Exception:
+            pass
         self._data["updated_at"] = datetime.now(timezone.utc).isoformat()
         self._file.write_text(json.dumps(self._data, ensure_ascii=False, indent=2))
 

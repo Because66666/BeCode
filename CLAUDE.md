@@ -20,30 +20,29 @@
   应重试多次后再决定是否退出；JSON 解析错误应归入工具调用错误类别。
 - Agnet 工作流的设计模式：Coder Agent（实现）→ Reviewer Agent（审查）→ 反馈循环，每轮落盘持久化。
 - 当前每完成一次工作后，对当前工作进行简短总结，使用git工具进行提交。**不要使用git push**。
-- 具体的文件级工程记忆写入对应的文件头部注释，其余重要的记忆写入`## Learned Workspace Facts`部分。只写你认为以后用的上的，至于你具体实现了什么不必写。
+- 具体的文件级工程记忆写入对应的文件头部注释。
+- **飞书集成偏好**：用户明确要求**不使用第三方开源项目**，倾向使用飞书官方提供的 MCP 服务器或飞书开放平台的原生能力。用户在 Issue #5 的讨论中拒绝了第三方开源 MCP 项目方案。
 
 ## Learned Workspace Facts
 
-- 代码结构: `src/agents/`（coder + reviewer）、`src/tools/`（read_file, edit_file, bash_exec + bash_guard）、`src/core/`（config, llm_client, session_store, orchestrator）、`src/ui/`（console, callbacks, collapsible）。
-- 关键依赖: `langchain>=0.3`, `langchain-openai`, `langgraph`, `python-dotenv`, `pydantic-settings`, `requests`, `beautifulsoup4`, `rich`, `keyboard`。
-- 具体的文件级工程记忆已移入对应源文件的头部注释中，搜索 `╔══════════════════════════════════════════════════╗` 即可查阅。
-- 测试文件位于 `tests/` 目录，覆盖所有模块：config, llm_client, session_store, tools,
-  bash_guard, web_search, orchestrator, console, callbacks, collapsible,
-  coder_agent, reviewer_agent, main, mcp_manager。
 - 运行全部测试命令：`python -m pytest tests/ -v`（或 `pytest tests/ -v`）。
-- 由于 `@tool` 装饰器返回 `StructuredTool` 对象，测试中使用 `tool.func()` 
-  调用原始函数（通过 `_call(tool, *args)` 辅助函数）。
 - 环境变量 `BASH_GUARD_LLM_DISABLED=1` 在测试中自动设置以跳过 LLM 安全审查层。
 - MCP Server 支持: `src/tools/mcp_manager.py`，支持 HTTP 和 Command 两种类型。
 - MCP 配置文件: `~/.becode/mcp.json`（主），`~/.becode/mcp_servers.json`（兼容旧版）。
   同时会加载项目根目录 `mcp.json` 并与之合并（项目配置优先级更高）。
 - 首次运行时静默创建 `~/.becode/.env` 和 `~/.becode/mcp.json`（即 `ensure_config()` 不再弹出交互式提示）。
-- MCP 工具在 `build_coder_agent()` 时动态发现，包装为 `StructuredTool` 注入 Agent。
-- `list_mcp_servers` 工具让 Agent 可见所有已配置的 MCP 服务器及其工具。
-- HTTP 类型的 MCP 服务器支持 `headers` 配置项，支持 `${ENV_VAR}` 环境变量替换。
-  GitHub MCP 使用 `Authorization: Bearer ${GITHUB_TOKEN}` 进行认证。
-- TokenTracker 改为按 agent（coder/reviewer）分开统计，支持 snapshot/restore
-  机制避免重试时的重复计数。Orchestrator 在每次 agent 尝试前调用
-  `snapshot()`，失败后调用 `restore()` 回滚。
-- `console.final_result()` 展示按 agent 拆分的 token 统计（coder/reviewer/合计）。
-- KeyboardInterrupt 三层防御: (1) `run_interactive()` 内部捕获 → 返回 `interrupted=True`; (2) `interactive_mode()` 内部循环和 while 外围各有一个 except; (3) `main()` 顶层兜底。所有入口统一用 `show_interrupt_message()` 显示「用户已取消任务」，不渲染 traceback。
+- `/CODE_MAP.md` 文件为代码地图，包含目录结构与代码文件的简要说明。
+- **Compressor Agent**: `src/core/context_compressor.py` 实现独立的 Compressor Agent，
+  当上下文达到 `max_context_length` 的 90%（硬编码阈值）时触发 Map-Reduce 压缩。
+  压缩后 Coder Agent 上下文 = 用户原文 + 压缩摘要 + 最近三轮工具调用记录。
+  压缩事件记录在 session 的 `compression_events` 列表中。
+- **MCP args_schema 关键修复**: `StructuredTool.from_function(func=fn)` 无 `args_schema`
+  参数时，对于 `**kwargs` 函数会生成仅含 `kwargs: dict` 的 schema，导致 LLM 传入
+  的参数被 LangChain 静默丢弃。`_create_args_schema()` 将 MCP 工具的 `input_schema.
+  properties` 转为 Pydantic model，确保参数正确传递。`_make_mcp_tool_fn()` 中还会
+  在调用前过滤掉值为 `None` 的参数，避免 MCP 服务器拒绝 `null` 值。
+- **Session Memory Tool**: `src/tools/session_memory.py` 实现会话记忆工具（仅交互式对话有效）。
+  - 存储位置: `~/.becode/memory/{8位session_id}.md`
+  - 两种模式: `write`(写入/追加) 和 `read only`(读取)
+  - 由 `main.py` 中 `interactive_mode()` 入口设置 session ID
+  - 已存在的记忆文件内容通过 `load_session_memory()` 自动注入到 Coder Agent user_message 的 `## 会话记忆` 章节

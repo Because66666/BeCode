@@ -29,11 +29,33 @@ from src.core.config import settings, BECODE_HOME, SESSION_DIR, ensure_config, r
 from src.core.orchestrator import Orchestrator
 from src.core.session_store import SessionStore
 from src.tools.mcp_manager import get_mcp_config_path
+from src.tools.session_memory import (
+    set_session_memory_id,
+    load_session_memory,
+)
 from src.tools.tools import set_workspace_root
 
 # ── Application metadata ───────────────────────────────────────────
 APP_NAME = "BeCode"
-APP_VERSION = "1.0.0"
+
+
+def _read_version() -> str:
+    """Read version from the ``version`` file at project root.
+
+    Falls back to ``1.0.0`` if the file is missing or unreadable.
+    The ``version`` file is included in PyInstaller ``datas`` so this
+    works both in development and in the packaged executable.
+    """
+    try:
+        vfile = Path(__file__).resolve().parent / "version"
+        if vfile.is_file():
+            return vfile.read_text(encoding="utf-8").strip()
+    except Exception:
+        pass
+    return "1.0.0"
+
+
+APP_VERSION = _read_version()
 
 # Only WARNING and above (ERROR, CRITICAL) are shown on console
 logging.basicConfig(
@@ -85,6 +107,15 @@ def interactive_mode(orchestrator: Orchestrator, model_name: Optional[str] = Non
         max_iterations=settings.max_iterations,
         model=settings.openai_model,
     )
+
+    # ── Initialize session memory for this interactive session ──
+    set_session_memory_id(orchestrator.session.session_id)
+    existing_memory = load_session_memory()
+    if existing_memory:
+        console.print(
+            "[bold cyan]📝 检测到已有会话记忆[/] — 已自动加载到 Coder Agent 上下文中。\n"
+        )
+
     console.print(
         "[bold italic cyan]🤖 交互式对话模式[/] — 输入任务需求开始，输入 [bold].exit[/] 退出\n"
     )
